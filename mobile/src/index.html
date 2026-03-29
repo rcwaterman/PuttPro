@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; connect-src *; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+    <title>PuttPro</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:      #111;
+            --surface: #1e1e1e;
+            --border:  #2a2a2a;
+            --text:    #eee;
+            --muted:   #888;
+            --green:   #4caf50;
+            --yellow:  #ff9800;
+            --red:     #f44336;
+            --accent:  #2979ff;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, sans-serif;
+            min-height: 100svh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* ── Shared header ── */
+        .header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.2rem 0.6rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .header h1 { font-size: 1.1rem; letter-spacing: 0.06em; }
+        .header-actions { display: flex; gap: 0.5rem; }
+
+        /* ── Buttons ── */
+        button {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid #444;
+            border-radius: 7px;
+            padding: 0.6rem 1.4rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        button:active { background: #2e2e2e; }
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+        button.icon {
+            padding: 0.5rem 0.75rem;
+            font-size: 1rem;
+            border-radius: 50%;
+        }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ── Screen system ── */
+        .screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            flex: 1;
+            padding: 1.2rem;
+            gap: 1rem;
+        }
+        .screen.active { display: flex; }
+
+        /* ── Setup screen ── */
+        .setup-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.4rem;
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+        }
+        .setup-card label { font-size: 0.85rem; color: var(--muted); }
+        .setup-card input {
+            width: 100%;
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 0.6rem 0.8rem;
+            font-size: 0.9rem;
+            font-family: monospace;
+        }
+        .setup-card input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
+        /* QR scan preview */
+        #qrVideo {
+            width: 100%;
+            max-width: 480px;
+            border-radius: 8px;
+            background: #000;
+            aspect-ratio: 4/3;
+            display: none;
+        }
+        #qrCanvas { display: none; }
+        #qrStatus { font-size: 0.82rem; color: var(--muted); text-align: center; }
+
+        /* ── Hint card ── */
+        .hint {
+            font-size: 0.78rem;
+            color: var(--muted);
+            line-height: 1.5;
+            max-width: 480px;
+            width: 100%;
+        }
+        .hint strong { color: var(--text); }
+
+        /* ── Stream screen ── */
+        #streamVideo {
+            width: 100%;
+            max-width: 520px;
+            border-radius: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+        }
+        #streamVideo.mirror { transform: scaleX(-1); }
+
+        .controls { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+        .dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            background: #555;
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        .dot.green  { background: var(--green); }
+        .dot.yellow { background: var(--yellow); }
+        .dot.red    { background: var(--red); }
+
+        #fpsEl { font-size: 0.75rem; color: #666; }
+
+        /* ── Server URL badge (stream screen) ── */
+        #serverBadge {
+            font-size: 0.7rem;
+            color: #555;
+            font-family: monospace;
+            max-width: 320px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════
+     SETUP SCREEN
+════════════════════════════════════ -->
+<div id="screenSetup" class="screen active">
+    <div class="header" style="position:sticky;top:0;background:var(--bg);z-index:1;">
+        <h1>PuttPro</h1>
+    </div>
+
+    <video id="qrVideo" autoplay playsinline muted></video>
+    <canvas id="qrCanvas"></canvas>
+    <p id="qrStatus"></p>
+
+    <div class="setup-card">
+        <label for="serverUrlInput">Server URL</label>
+        <input id="serverUrlInput" type="url" spellcheck="false" autocorrect="off" autocapitalize="none"
+               placeholder="https://192.168.x.x:5000/mobile?token=…">
+
+        <button id="btnConnect" class="primary">Connect</button>
+        <button id="btnDiscover">Find Server Automatically</button>
+        <button id="btnScan">Scan QR Code</button>
+    </div>
+
+    <div class="hint">
+        <strong>Setup:</strong><br>
+        1. Run <code>python app.py</code> on your PC (same WiFi network).<br>
+        2. Tap <strong>Find Server Automatically</strong> — works instantly on iOS and
+           modern Android via mDNS (<code>puttpro.local</code>).<br>
+        3. Or scan the QR code from the server startup output.<br>
+        4. Or paste the <em>Mobile</em> URL manually and tap Connect.
+        <br><br>
+        <strong>Certificate warning?</strong> Scan the CA QR from startup output
+        and install <code>PuttPro-CA.crt</code> on this device first.
+    </div>
+</div>
+
+<!-- ════════════════════════════════════
+     STREAM SCREEN
+════════════════════════════════════ -->
+<div id="screenStream" class="screen">
+    <div class="header" style="position:sticky;top:0;background:var(--bg);z-index:1;">
+        <h1>PuttPro</h1>
+        <div class="header-actions">
+            <button class="icon" id="btnSettings" title="Settings">⚙</button>
+        </div>
+    </div>
+
+    <video id="streamVideo" autoplay playsinline muted></video>
+
+    <div class="controls">
+        <button id="btnFlip">Flip Camera</button>
+        <button id="btnDisconnect">Disconnect</button>
+    </div>
+
+    <div class="status-bar">
+        <div class="dot yellow" id="dot"></div>
+        <span id="statusText">Starting…</span>
+    </div>
+    <div id="fpsEl"></div>
+    <div id="serverBadge"></div>
+</div>
+
+<!-- jsQR loaded from src/ (copied from node_modules by npm prepare) -->
+<script src="./jsQR.js"></script>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Config helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'puttpro_config';
+
+function saveConfig(serverBase, token) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ serverBase, token }));
+}
+
+function loadConfig() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; }
+}
+
+function clearConfig() {
+    localStorage.removeItem(STORAGE_KEY);
+}
+
+/** Parse 'https://host:port/mobile?token=XXX' into { serverBase, token } */
+function parseUrl(raw) {
+    try {
+        const u = new URL(raw.trim());
+        const token = u.searchParams.get('token');
+        if (!token) return null;
+        const serverBase = `${u.protocol}//${u.host}`;
+        return { serverBase, token };
+    } catch {
+        return null;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Screen routing
+// ─────────────────────────────────────────────────────────────────────────────
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QR scanner (uses jsQR)
+// ─────────────────────────────────────────────────────────────────────────────
+const qrVideo  = document.getElementById('qrVideo');
+const qrCanvas = document.getElementById('qrCanvas');
+const qrCtx    = qrCanvas.getContext('2d');
+const qrStatus = document.getElementById('qrStatus');
+let   qrStream = null;
+let   qrRaf    = null;
+
+async function startQrScan() {
+    if (typeof jsQR === 'undefined') {
+        qrStatus.textContent = 'jsQR not loaded — paste URL manually.';
+        return;
+    }
+    try {
+        qrStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+            audio: false,
+        });
+        qrVideo.srcObject = qrStream;
+        qrVideo.style.display = 'block';
+        qrStatus.textContent = 'Point at the server QR code…';
+        scanLoop();
+    } catch (e) {
+        qrStatus.textContent = 'Camera error: ' + e.message;
+    }
+}
+
+function stopQrScan() {
+    if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = null; }
+    if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
+    qrVideo.style.display = 'none';
+    qrStatus.textContent = '';
+}
+
+function scanLoop() {
+    if (qrVideo.readyState < 2) { qrRaf = requestAnimationFrame(scanLoop); return; }
+    qrCanvas.width  = qrVideo.videoWidth;
+    qrCanvas.height = qrVideo.videoHeight;
+    qrCtx.drawImage(qrVideo, 0, 0);
+    const imageData = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+    if (code) {
+        const parsed = parseUrl(code.data);
+        if (parsed) {
+            stopQrScan();
+            document.getElementById('serverUrlInput').value = code.data;
+            qrStatus.textContent = '✓ QR detected — tap Connect to continue.';
+            return;
+        }
+    }
+    qrRaf = requestAnimationFrame(scanLoop);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Setup screen logic
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('btnConnect').addEventListener('click', () => {
+    const raw    = document.getElementById('serverUrlInput').value;
+    const parsed = parseUrl(raw);
+    if (!parsed) {
+        alert('Invalid URL. Paste the full Mobile URL from server startup output.');
+        return;
+    }
+    stopQrScan();
+    saveConfig(parsed.serverBase, parsed.token);
+    startStreaming(parsed.serverBase, parsed.token);
+});
+
+document.getElementById('btnScan').addEventListener('click', () => {
+    if (qrStream) { stopQrScan(); return; }
+    startQrScan();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// mDNS auto-discovery
+// Tries https://puttpro.local:5000/api/info — works natively on iOS.
+// On Android, .local resolution depends on OS version (Android 12+ is reliable).
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('btnDiscover').addEventListener('click', async () => {
+    const btn = document.getElementById('btnDiscover');
+    btn.disabled = true;
+    btn.textContent = 'Searching…';
+    qrStatus.textContent = 'Trying puttpro.local…';
+
+    const candidates = [
+        'https://puttpro.local:5000',
+    ];
+
+    for (const base of candidates) {
+        try {
+            const res = await fetch(`${base}/api/info`, {
+                signal: AbortSignal.timeout(4000),
+            });
+            if (res.ok) {
+                const { token } = await res.json();
+                stopQrScan();
+                saveConfig(base, token);
+                qrStatus.textContent = `✓ Found server at ${base}`;
+                startStreaming(base, token);
+                return;
+            }
+        } catch {
+            // try next candidate
+        }
+    }
+
+    qrStatus.textContent = 'Server not found. Try scanning the QR code instead.';
+    btn.disabled = false;
+    btn.textContent = 'Find Server Automatically';
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Streaming
+// ─────────────────────────────────────────────────────────────────────────────
+const streamVideo = document.getElementById('streamVideo');
+const dot         = document.getElementById('dot');
+const statusText  = document.getElementById('statusText');
+const fpsEl       = document.getElementById('fpsEl');
+const serverBadge = document.getElementById('serverBadge');
+
+const MAX_IN_FLIGHT = 2;
+const JPEG_QUALITY  = 0.80;
+
+let uploadUrl   = '';
+let uploadToken = '';
+let facingMode  = 'environment';
+let stopStream  = false;
+let inFlight    = 0;
+let encoding    = false;
+let errorCount  = 0;
+let framesSent  = 0;
+
+setInterval(() => {
+    fpsEl.textContent = framesSent > 0 ? `${framesSent} fps` : '';
+    framesSent = 0;
+}, 1000);
+
+function setStatus(state, text) {
+    dot.className = 'dot ' + state;
+    statusText.textContent = text;
+}
+
+// Off-main-thread encoder using OffscreenCanvas Worker when available.
+const USE_WORKER = typeof OffscreenCanvas !== 'undefined' && typeof Worker !== 'undefined';
+let worker = null;
+const pending = new Map();
+let encId = 0;
+
+if (USE_WORKER) {
+    const workerSrc = `
+        self.onmessage = async ({ data: { id, bitmap, quality } }) => {
+            const c = new OffscreenCanvas(bitmap.width, bitmap.height);
+            c.getContext('2d').drawImage(bitmap, 0, 0);
+            bitmap.close();
+            const blob = await c.convertToBlob({ type: 'image/jpeg', quality });
+            const buf  = await blob.arrayBuffer();
+            self.postMessage({ id, buf }, [buf]);
+        };
+    `;
+    const blob = new Blob([workerSrc], { type: 'text/javascript' });
+    worker = new Worker(URL.createObjectURL(blob));
+    worker.onmessage = ({ data: { id, buf } }) => {
+        const res = pending.get(id);
+        if (res) { pending.delete(id); res(buf); }
+    };
+}
+
+const fbCanvas = document.createElement('canvas');
+
+async function encodeFrame() {
+    if (worker) {
+        const bitmap = await createImageBitmap(streamVideo);
+        return new Promise(resolve => {
+            const id = encId++;
+            pending.set(id, resolve);
+            worker.postMessage({ id, bitmap, quality: JPEG_QUALITY }, [bitmap]);
+        });
+    }
+    fbCanvas.width  = streamVideo.videoWidth;
+    fbCanvas.height = streamVideo.videoHeight;
+    fbCanvas.getContext('2d').drawImage(streamVideo, 0, 0);
+    const blob = await new Promise(r => fbCanvas.toBlob(r, 'image/jpeg', JPEG_QUALITY));
+    return blob.arrayBuffer();
+}
+
+async function sendFrame() {
+    if (encoding || inFlight >= MAX_IN_FLIGHT || streamVideo.readyState < 2) return;
+    encoding = true;
+    let buf;
+    try {
+        buf = await encodeFrame();
+    } finally {
+        encoding = false;
+    }
+    inFlight++;
+    framesSent++;
+    fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/jpeg', 'X-Upload-Token': uploadToken },
+        body: buf,
+    })
+    .then(r => {
+        if (r.ok) { errorCount = 0; setStatus('green', 'Streaming'); }
+        else { onError('Server ' + r.status); }
+    })
+    .catch(() => onError('Network error'))
+    .finally(() => { inFlight--; });
+}
+
+function onError(msg) {
+    errorCount++;
+    if (errorCount >= 3) setStatus('red', msg);
+}
+
+function startFrameLoop() {
+    stopStream = false;
+    if ('requestVideoFrameCallback' in streamVideo) {
+        function vfc() { if (!stopStream) { sendFrame(); streamVideo.requestVideoFrameCallback(vfc); } }
+        streamVideo.requestVideoFrameCallback(vfc);
+    } else {
+        function raf() { if (!stopStream) { sendFrame(); requestAnimationFrame(raf); } }
+        requestAnimationFrame(raf);
+    }
+}
+
+async function startStreaming(serverBase, token) {
+    uploadUrl   = serverBase + '/upload_frame';
+    uploadToken = token;
+
+    showScreen('screenStream');
+    serverBadge.textContent = serverBase;
+    setStatus('yellow', 'Starting camera…');
+
+    await openCamera();
+}
+
+async function openCamera() {
+    stopStream = true;
+    if (streamVideo.srcObject) {
+        streamVideo.srcObject.getTracks().forEach(t => t.stop());
+        streamVideo.srcObject = null;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus('red', 'Camera API unavailable — HTTPS required');
+        return;
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } },
+            audio: false,
+        });
+        streamVideo.srcObject = stream;
+        streamVideo.classList.toggle('mirror', facingMode === 'user');
+        await new Promise(r => streamVideo.addEventListener('loadedmetadata', r, { once: true }));
+        setStatus('green', 'Streaming');
+        startFrameLoop();
+    } catch (e) {
+        setStatus('red', 'Camera: ' + e.message);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Controls
+// ─────────────────────────────────────────────────────────────────────────────
+document.getElementById('btnFlip').addEventListener('click', () => {
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    openCamera();
+});
+
+document.getElementById('btnDisconnect').addEventListener('click', disconnect);
+document.getElementById('btnSettings').addEventListener('click', disconnect);
+
+function disconnect() {
+    stopStream = true;
+    if (streamVideo.srcObject) {
+        streamVideo.srcObject.getTracks().forEach(t => t.stop());
+        streamVideo.srcObject = null;
+    }
+    clearConfig();
+    showScreen('screenSetup');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────────────────────
+(function boot() {
+    const cfg = loadConfig();
+    if (cfg?.serverBase && cfg?.token) {
+        startStreaming(cfg.serverBase, cfg.token);
+    }
+    // Otherwise stay on setup screen (default active).
+})();
+</script>
+</body>
+</html>

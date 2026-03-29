@@ -1,0 +1,10 @@
+Flask==3.1.3
+numpy==2.4.4
+opencv-contrib-python==4.13.0.92
+cryptography==46.0.6
+qrcode==8.2
+pillow==12.1.1
+ultralytics
+zeroconf
+# torch + torchvision must be installed separately with the CUDA index URL:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126

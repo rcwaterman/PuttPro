@@ -1,0 +1,81 @@
+# PuttPro server — local dev and cloud deployment profiles.
+#
+# Local dev (GPU, mkcert cert auto-generated):
+#   docker compose --profile local up
+#
+# Cloud GPU (provide real cert and model path):
+#   docker compose --profile cloud up
+#
+# Cloud CPU (cost-optimised, no GPU required):
+#   docker compose --profile cloud-cpu up
+
+services:
+
+  # ── Local development — GPU, self-managed cert ─────────────────────────────
+  puttpro-local:
+    profiles: [local]
+    build:
+      context: .
+      args: { BASE: gpu }
+    image: puttpro:local
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+    volumes:
+      # Mount the app/ dir for live code changes without rebuilding
+      - ./app:/app
+    environment:
+      - CAMERA_MODE=remote
+
+  # ── Cloud — GPU instance (e.g. AWS g4dn.xlarge ~$0.53/hr on-demand) ────────
+  puttpro-cloud:
+    profiles: [cloud]
+    build:
+      context: .
+      args: { BASE: gpu }
+    image: puttpro:cloud
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "5000:5000"
+    volumes:
+      - ${CERT_DIR:-./certs}:/certs:ro
+      - ${MODEL_DIR:-./models}:/models:ro
+    environment:
+      - CAMERA_MODE=remote
+      - PUTTPRO_CERT_FILE=/certs/cert.pem
+      - PUTTPRO_KEY_FILE=/certs/key.pem
+      - YOLO_MODEL=${YOLO_MODEL:-/models/yolov8n.pt}
+    restart: unless-stopped
+
+  # ── Cloud — CPU instance (e.g. AWS t3.medium ~$0.04/hr) ───────────────────
+  # Use when GPU cost is not justified (lower throughput, fine for low-traffic).
+  puttpro-cloud-cpu:
+    profiles: [cloud-cpu]
+    build:
+      context: .
+      args: { BASE: cpu }
+    image: puttpro:cloud-cpu
+    ports:
+      - "5000:5000"
+    volumes:
+      - ${CERT_DIR:-./certs}:/certs:ro
+      - ${MODEL_DIR:-./models}:/models:ro
+    environment:
+      - CAMERA_MODE=remote
+      - PUTTPRO_CERT_FILE=/certs/cert.pem
+      - PUTTPRO_KEY_FILE=/certs/key.pem
+      - YOLO_MODEL=${YOLO_MODEL:-/models/yolov8n.pt}
+    restart: unless-stopped

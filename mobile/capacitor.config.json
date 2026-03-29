@@ -1,0 +1,10 @@
+{
+  "appId": "com.puttpro.app",
+  "appName": "PuttPro",
+  "webDir": "src",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}
