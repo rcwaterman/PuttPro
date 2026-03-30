@@ -25,16 +25,16 @@ def _load_yolo(model_path: str, conf: float, imgsz: int):
 
     if torch.cuda.is_available():
         model.to(0)
-        model.model.half()   # FP16 — halves VRAM usage, ~2x throughput on RTX
+        #model.model.half()   # FP16 — halves VRAM usage, ~2x throughput on RTX
         dtype  = torch.float16
         device = f'CUDA — {torch.cuda.get_device_name(0)}'
+        dummy = np.zeros((imgsz, imgsz, 3), dtype=np.float16)
     else:
         dtype  = torch.float32
         device = 'CPU'
+        dummy = np.zeros((imgsz, imgsz, 3), dtype=np.float32)
 
     print(f'YOLO "{model_path}" loaded on {device}.')
-
-    dummy = np.zeros((imgsz, imgsz, 3), dtype=np.uint8)
     model(dummy, imgsz=imgsz, conf=conf, verbose=False)
     print(f'YOLO warm-up complete.')
 
