@@ -213,3 +213,12 @@ __marimo__/
 # Misc
 .upload_token
 /data
+/uploads
+*.mp4
+*.pt
+*.onnx
+
+# Runtime data / generated outputs
+video_analysis/uploads/
+video_analysis/outputs/
+ML/models/

@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1e1e1e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PuttPro">
+  <title>PuttPro</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1e1e1e;
+      --surface:   #252526;
+      --surface2:  #2d2d30;
+      --border:    #3e3e42;
+      --accent:    #007acc;
+      --accent-h:  #1a85ff;
+      --teal:      #4ec9b0;
+      --orange:    #ce9178;
+      --text:      #d4d4d4;
+      --text-dim:  #9d9d9d;
+      --muted:     #6a6a6a;
+      --danger:    #f44747;
+      --radius:    8px;
+      --tab-h:     56px;
+      --header-h:  52px;
+      --safe-b:    env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 15px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── App shell ──────────────────────────────────────────────────────────── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────────── */
+    #header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: var(--header-h);
+      padding: 0 16px;
+      padding-top: env(safe-area-inset-top, 0px);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    #back-btn {
+      display: none;
+      width: 36px; height: 36px;
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 22px;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    #back-btn.visible { display: flex; }
+    #header-brand {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    #header-title { font-size: 17px; font-weight: 700; line-height: 1.05; }
+    #header-context {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #header-action {
+      display: none;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #header-action:active { opacity: 0.8; }
+
+    /* ── Screens ──────────────────────────────────────────────────────────────── */
+    #screens {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      transform: translateX(100%);
+      transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform;
+    }
+    .screen.active  { transform: translateX(0); }
+    .screen.left    { transform: translateX(-28%); }
+
+    /* ── Tab bar ──────────────────────────────────────────────────────────────── */
+    #tabs {
+      display: flex;
+      height: calc(var(--tab-h) + var(--safe-b));
+      padding-bottom: var(--safe-b);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .tab.active { color: var(--accent); }
+    .tab:active { opacity: 0.7; }
+
+    /* ── Home / History screen ───────────────────────────────────────────────── */
+    #screen-home { background: var(--bg); }
+
+    .job-list {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .job-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .job-card:active { background: var(--surface2); }
+
+    .job-thumb {
+      width: 56px; height: 42px;
+      border-radius: 5px;
+      background: var(--surface2);
+      flex-shrink: 0;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 20px;
+    }
+    .job-thumb video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+    }
+
+    .job-info { flex: 1; min-width: 0; }
+    .job-name {
+      font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .job-meta { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+
+    .job-status {
+      font-size: 11px; font-weight: 700;
+      padding: 3px 8px; border-radius: 99px;
+      text-transform: uppercase; letter-spacing: .05em;
+      flex-shrink: 0;
+    }
+    .status-done      { background: rgba(78,201,176,0.15); color: var(--teal); }
+    .status-error     { background: rgba(244,71,71,0.15);  color: var(--danger); }
+    .status-working   { background: rgba(0,122,204,0.15);  color: var(--accent); }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 32px;
+      color: var(--muted);
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 14px; opacity: 0.5; }
+    .empty-msg  { font-size: 15px; line-height: 1.5; }
+
+    /* ── Record screen ───────────────────────────────────────────────────────── */
+    #screen-record {
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #camera-preview {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      position: absolute;
+      inset: 0;
+    }
+
+    .record-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding-bottom: calc(24px + var(--safe-b));
+      pointer-events: none;
+    }
+    .record-controls {
+      display: flex;
+      align-items: center;
+      gap: 40px;
+      pointer-events: all;
+    }
+
+    #record-timer {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      padding: 5px 14px;
+      border-radius: 99px;
+      display: none;
+      pointer-events: none;
+    }
+    #record-timer.visible { display: block; }
+
+    .record-btn {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      border: 4px solid #fff;
+      background: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s;
+    }
+    .record-btn:active { transform: scale(0.93); }
+    .record-btn-inner {
+      width: 50px; height: 50px;
+      border-radius: 50%;
+      background: #e53935;
+      transition: border-radius 0.2s, width 0.2s, height 0.2s;
+    }
+    .record-btn.recording .record-btn-inner {
+      border-radius: 8px;
+      width: 36px; height: 36px;
+    }
+
+    .flip-btn {
+      width: 44px; height: 44px;
+      background: rgba(0,0,0,0.45);
+      border: none;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .flip-btn:active { opacity: 0.7; }
+
+    .no-camera-msg {
+      color: var(--text-dim);
+      text-align: center;
+      padding: 40px;
+      z-index: 1;
+    }
+
+    /* ── Mode toggle pill ────────────────────────────────────────────────────── */
+    .mode-toggle {
+      position: absolute;
+      top: 14px; left: 50%; transform: translateX(-50%);
+      display: none;
+      background: rgba(0,0,0,0.55);
+      border-radius: 99px;
+      padding: 3px;
+      gap: 2px;
+      pointer-events: all;
+      z-index: 10;
+    }
+    .mode-btn {
+      padding: 6px 16px;
+      border-radius: 99px;
+      border: none;
+      background: none;
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .mode-btn.active {
+      background: rgba(255,255,255,0.18);
+      color: #fff;
+    }
+
+    /* ── Live session overlay ────────────────────────────────────────────────── */
+    #live-hud {
+      position: absolute;
+      top: 52px; left: 0; right: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #live-hud.visible { display: flex; }
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(220,30,30,0.75);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 99px;
+      letter-spacing: .08em;
+    }
+    .live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #fff;
+      animation: blink 1s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+    .live-stats {
+      display: flex;
+      gap: 10px;
+    }
+    .live-stat {
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      padding: 5px 12px;
+      border-radius: 8px;
+      text-align: center;
+      min-width: 60px;
+    }
+    .live-stat-val  { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .live-stat-lbl  { font-size: 10px; opacity: .65; text-transform: uppercase; letter-spacing: .06em; }
+
+
+    /* ── Preview screen ──────────────────────────────────────────────────────── */
+    #screen-preview { background: var(--bg); }
+
+    #screen-upload {
+      background: var(--bg);
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .upload-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .upload-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .upload-card p {
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .upload-pick-btn {
+      padding: 12px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .upload-file-name {
+      font-size: 12px;
+      color: var(--text-dim);
+      word-break: break-word;
+    }
+
+    .preview-video-wrap {
+      background: #000;
+      position: relative;
+    }
+    #preview-video {
+      width: 100%;
+      max-height: 55vh;
+      display: block;
+      object-fit: contain;
+    }
+
+    .preview-body { padding: 16px; }
+
+    .upload-form { display: flex; flex-direction: column; gap: 14px; }
+
+    .form-group label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .form-group label span { font-weight: 600; color: var(--text); }
+
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 9px 12px;
+      font-size: 14px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      padding: 16px 16px 6px;
+    }
+
+    #upload-btn {
+      margin: 8px 16px 16px;
+      padding: 15px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      width: calc(100% - 32px);
+      transition: opacity 0.2s;
+    }
+    #upload-btn:active { opacity: 0.82; }
+    #upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Upload progress ─────────────────────────────────────────────────────── */
+    #screen-uploading { background: var(--bg); display: flex; flex-direction: column;
+                        align-items: center; justify-content: center; gap: 24px; padding: 40px; }
+
+    .upload-icon { font-size: 56px; animation: pulse 1.8s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.5} }
+
+    .upload-label { font-size: 18px; font-weight: 600; text-align: center; }
+    .upload-sublabel { font-size: 14px; color: var(--text-dim); text-align: center; }
+
+    .progress-track {
+      width: 100%;
+      max-width: 300px;
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--teal));
+      border-radius: 99px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    .upload-fps { font-size: 13px; color: var(--muted); }
+    .pipeline-status {
+      width: 100%;
+      max-width: 300px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: var(--surface);
+      color: var(--text-dim);
+      font-size: 12px;
+      text-align: left;
+      min-height: 34px;
+    }
+
+    /* ── Result screen ───────────────────────────────────────────────────────── */
+    #screen-result { background: var(--bg); }
+
+    #result-video-wrap { background: #000; }
+    #result-video {
+      width: 100%;
+      max-height: 50vh;
+      display: block;
+      object-fit: contain;
+    }
+
+    .result-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 8px;
+      text-align: center;
+    }
+    .stat-value { font-size: 20px; font-weight: 800; color: var(--accent); }
+    .stat-label { font-size: 10px; color: var(--muted); margin-top: 2px;
+                  text-transform: uppercase; letter-spacing: .05em; }
+
+    .action-row { display: flex; gap: 10px; }
+    .action-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .action-btn:active { opacity: 0.78; }
+    .action-btn:disabled { opacity: 0.45; pointer-events: none; }
+    .action-btn.active-mode { border-color: var(--accent); color: var(--accent); }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-ghost  { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+
+    .timeline-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .timeline-item {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .timeline-item:first-child { border-top: none; }
+    .timeline-item:active { background: var(--surface2); }
+    .timeline-time {
+      font-variant-numeric: tabular-nums;
+      font-weight: 800;
+      color: var(--accent);
+      min-width: 48px;
+    }
+    .timeline-meta {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .detections-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    /* ── Toast ───────────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: calc(var(--tab-h) + var(--safe-b) + 14px);
+      left: 50%; transform: translateX(-50%);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+      padding: 10px 20px;
+      border-radius: 99px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── Spinner ─────────────────────────────────────────────────────────────── */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Refresh button ───────────────────────────────────────────────────────── */
+    #refresh-btn {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── Header ───────────────────────────────────────────────────────────────── -->
+  <div id="header">
+    <button id="back-btn" aria-label="Back">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <div id="header-brand">
+      <div id="header-title">PuttPro</div>
+      <div id="header-context">Session</div>
+    </div>
+    <button id="header-action"></button>
+  </div>
+
+  <!-- ── Screens ──────────────────────────────────────────────────────────────── -->
+  <div id="screens">
+
+    <!-- Home / History -->
+    <div class="screen active" id="screen-home">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px 0 16px;">
+        <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;">Recent</div>
+        <button id="refresh-btn">Refresh</button>
+      </div>
+      <div id="job-list" class="job-list"></div>
+    </div>
+
+    <!-- Record -->
+    <div class="screen" id="screen-record">
+      <video id="camera-preview" autoplay muted playsinline></video>
+
+      <!-- Mode toggle (top center) -->
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="mode-upload-btn">Upload</button>
+        <button class="mode-btn" id="mode-live-btn">Live</button>
+      </div>
+
+      <!-- Single-putt timer -->
+      <div id="record-timer"></div>
+
+      <!-- Live HUD (only visible in live mode during session) -->
+      <div id="live-hud">
+        <div class="live-badge">
+          <div class="live-dot"></div>
+          LIVE
+        </div>
+        <div class="live-stats">
+          <div class="live-stat">
+            <div class="live-stat-val" id="live-session-time">0:00</div>
+            <div class="live-stat-lbl">Time</div>
+          </div>
+          <div class="live-stat">
+            <div class="live-stat-val" id="live-putts">0</div>
+            <div class="live-stat-lbl">Putts</div>
+          </div>
+          <div class="live-stat" style="min-width:52px">
+            <div class="live-stat-val" id="live-made" style="color:#60a5fa">0</div>
+            <div class="live-stat-lbl">Made</div>
+          </div>
+          <div class="live-stat" style="min-width:52px">
+            <div class="live-stat-val" id="live-missed" style="color:#fbbf24">0</div>
+            <div class="live-stat-lbl">Missed</div>
+          </div>
+        </div>
+      </div>
+      <div class="record-overlay">
+        <div class="record-controls">
+          <button class="flip-btn" id="flip-btn" title="Flip camera">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 4v6h6"/><path d="M23 20v-6h-6"/>
+              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+            </svg>
+          </button>
+          <button class="record-btn" id="record-btn" title="Record">
+            <div class="record-btn-inner"></div>
+          </button>
+          <div style="width:44px"></div>
+        </div>
+      </div>
+
+      <div class="no-camera-msg" id="no-camera-msg" style="display:none;">
+        <p id="no-camera-title">Camera access unavailable.</p>
+        <p id="no-camera-detail" style="margin-top:8px;font-size:13px;">Allow camera access in your browser settings.</p>
+      </div>
+
+    </div>
+
+    <!-- Upload from local library -->
+    <div class="screen" id="screen-upload">
+      <div class="upload-card">
+        <h3>Upload Local Video</h3>
+        <p>Select a video from your phone. This upload workflow is separate from Start Session live recording.</p>
+        <input id="local-video-input" type="file" accept="video/*" style="display:none">
+        <button class="upload-pick-btn" id="upload-pick-btn" type="button">Choose Video</button>
+        <div class="upload-file-name" id="upload-file-name">No file selected</div>
+      </div>
+    </div>
+
+    <!-- Preview + Upload settings -->
+    <div class="screen" id="screen-preview">
+      <div class="preview-video-wrap">
+        <video id="preview-video" controls playsinline></video>
+      </div>
+
+      <div class="section-title">Analysis Settings</div>
+      <div class="preview-body">
+        <div class="upload-form">
+          <div class="form-group">
+            <label for="m-conf-range">Confidence threshold <span id="m-conf-val">0.35</span></label>
+            <input type="range" id="m-conf-range" min="0.1" max="0.9" step="0.05" value="0.35">
+          </div>
+          <div class="form-group">
+            <label for="m-imgsz">Inference resolution</label>
+            <select id="m-imgsz">
+              <option value="320">320 px — fastest</option>
+              <option value="480">480 px — balanced</option>
+              <option value="640" selected>640 px — best accuracy</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="m-skip">Analyze every N frames</label>
+            <select id="m-skip">
+              <option value="1">Every frame</option>
+              <option value="2">Every 2nd frame</option>
+              <option value="3">Every 3rd frame</option>
+              <option value="5">Every 5th frame (fastest)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button id="upload-btn">Analyze Putt</button>
+    </div>
+
+    <!-- Uploading / processing -->
+    <div class="screen" id="screen-uploading">
+      <div class="upload-icon" id="upload-icon">🎬</div>
+      <div class="upload-label" id="upload-label">Uploading...</div>
+      <div class="upload-sublabel" id="upload-sublabel"></div>
+      <div class="progress-track">
+        <div class="progress-fill" id="upload-progress-fill"></div>
+      </div>
+      <div class="pipeline-status" id="pipeline-status">Pipeline: waiting to start</div>
+      <div class="upload-fps" id="upload-fps"></div>
+    </div>
+
+    <!-- Stats / Dashboard -->
+    <div class="screen" id="screen-stats" style="background:var(--bg);overflow-y:auto">
+      <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+
+        <!-- KPI cards -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="m-kpi-grid">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:28px;font-weight:800;color:var(--accent)" id="m-kpi-total">—</div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:4px">Total Putts</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:28px;font-weight:800;color:var(--teal)" id="m-kpi-pct">—</div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:4px">Make %</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:28px;font-weight:800;color:#6a9955" id="m-kpi-made">—</div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:4px">Made</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center">
+            <div style="font-size:28px;font-weight:800;color:#f44747" id="m-kpi-missed">—</div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:4px">Missed</div>
+          </div>
+        </div>
+
+        <!-- Trend chart -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Make % Over Time</div>
+          <canvas id="m-trend-chart" height="140"></canvas>
+        </div>
+
+        <!-- Recent putts -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Recent Results</div>
+          <div id="m-putt-list" style="padding:4px 0"></div>
+        </div>
+
+        <!-- Full dashboard link -->
+        <a href="/dashboard" style="display:block;text-align:center;color:var(--accent);font-size:13px;padding:10px;text-decoration:none">
+          Open full dashboard ↗
+        </a>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div class="screen" id="screen-result">
+      <div id="result-video-wrap">
+        <video id="result-video" controls playsinline></video>
+      </div>
+      <div class="result-body">
+        <!-- Putt result banner -->
+        <div id="putt-banner" style="display:none;border-radius:var(--radius);padding:16px;text-align:center">
+          <div id="putt-banner-icon" style="font-size:36px;margin-bottom:4px"></div>
+          <div id="putt-banner-label" style="font-size:20px;font-weight:800;letter-spacing:.02em"></div>
+          <div id="putt-banner-sub"   style="font-size:12px;margin-top:4px;opacity:.75"></div>
+        </div>
+
+        <!-- Flight data -->
+        <div class="stats-row" id="result-stats"></div>
+
+        <!-- Actions -->
+        <div class="action-row">
+          <a class="action-btn btn-accent" id="result-download-btn" href="#" download>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download
+          </a>
+          <button class="action-btn btn-ghost" id="depth-toggle-btn" type="button">Depth Mode</button>
+        </div>
+
+        <!-- Putt timeline -->
+        <div class="timeline-panel" id="putt-timeline-panel" style="display:none">
+          <div class="detections-header">Putt Timeline (Tap To Seek)</div>
+          <div id="putt-timeline-body"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Tab bar ─────────────────────────────────────────────────────────────── -->
+  <div id="tabs">
+    <button class="tab active" data-tab="session" id="tab-session">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+      Session
+    </button>
+    <button class="tab" data-tab="upload" id="tab-upload">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Upload
+    </button>
+    <button class="tab" data-tab="home" id="tab-home">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      History
+    </button>
+    <button class="tab" data-tab="stats" id="tab-stats">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Stats
+    </button>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Constants & state ─────────────────────────────────────────────────────────
+const SCREEN_STACK    = [];       // navigation history
+let   currentTab      = 'session';   // 'session' | 'upload' | 'home' | 'stats'
+let   recordedBlob    = null;     // Blob from MediaRecorder
+let   mediaStream     = null;     // active getUserMedia stream
+let   mediaRecorder   = null;
+let   timerInterval   = null;
+let   timerSecs       = 0;
+let   facingMode      = 'environment';
+let   currentJobId    = null;
+let   sseSource       = null;
+
+// ── Live streaming state ──────────────────────────────────────────────────────
+const CHUNK_INTERVAL  = 2000;     // ms per streaming chunk (2 s)
+let   liveMode        = true;     // session page is streaming-only
+let   streamSessionId = null;
+let   streamChunkIdx  = 0;
+let   streamActive    = false;
+let   streamSse       = null;
+let   chunkRecorder   = null;
+let   chunkTimer      = null;
+let   sessionTimer    = null;
+let   sessionSecs     = 0;
+let   liveSummary     = { total_putts: 0, made: 0, missed: 0 };
+
+// ── Elements ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const header         = $('header');
+const backBtn        = $('back-btn');
+const headerTitle    = $('header-title');
+const headerContext  = $('header-context');
+const headerAction   = $('header-action');
+const tabSession       = $('tab-session');
+const tabUpload        = $('tab-upload');
+const tabHome          = $('tab-home');
+const tabStats         = $('tab-stats');
+const modeUploadBtn    = $('mode-upload-btn');
+const modeLiveBtn      = $('mode-live-btn');
+const liveHud          = $('live-hud');
+const liveSessionTime  = $('live-session-time');
+const livePutts        = $('live-putts');
+const liveMade         = $('live-made');
+const liveMissed       = $('live-missed');
+const jobList        = $('job-list');
+const refreshBtn     = $('refresh-btn');
+const cameraPreview  = $('camera-preview');
+const recordBtn      = $('record-btn');
+const flipBtn        = $('flip-btn');
+const recordTimer    = $('record-timer');
+const noCameraMsg    = $('no-camera-msg');
+const noCameraTitle  = $('no-camera-title');
+const noCameraDetail = $('no-camera-detail');
+const previewVideo   = $('preview-video');
+const localVideoInput = $('local-video-input');
+const uploadPickBtn   = $('upload-pick-btn');
+const uploadFileName  = $('upload-file-name');
+const uploadBtn      = $('upload-btn');
+const mConfRange     = $('m-conf-range');
+const mConfVal       = $('m-conf-val');
+const mImgsz         = $('m-imgsz');
+const mSkip          = $('m-skip');
+const uploadLabel    = $('upload-label');
+const uploadSubLabel = $('upload-sublabel');
+const uploadFill     = $('upload-progress-fill');
+const uploadPipeline = $('pipeline-status');
+const uploadFps      = $('upload-fps');
+const uploadIcon     = $('upload-icon');
+const resultVideo    = $('result-video');
+const resultStats    = $('result-stats');
+const resultDlBtn    = $('result-download-btn');
+const depthToggleBtn = $('depth-toggle-btn');
+const puttTimelinePanel = $('putt-timeline-panel');
+const puttTimelineBody  = $('putt-timeline-body');
+const toast          = $('toast');
+
+let currentResultJob = null;
+let depthModeActive = false;
+
+// ── LocalStorage: track own jobs ──────────────────────────────────────────────
+function getMyJobs() {
+  try { return JSON.parse(localStorage.getItem('puttproJobs') || '[]'); } catch { return []; }
+}
+function addMyJob(id) {
+  const jobs = getMyJobs();
+  if (!jobs.includes(id)) {
+    jobs.unshift(id);
+    localStorage.setItem('puttproJobs', JSON.stringify(jobs.slice(0, 50)));
+  }
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showScreen(id, opts = {}) {
+  const screens = document.querySelectorAll('.screen');
+  const target  = $(id);
+
+  screens.forEach(s => {
+    if (s.id !== id) s.classList.remove('active');
+  });
+
+  if (opts.slide !== false) {
+    // push previous screen left
+    const prev = document.querySelector('.screen.active');
+    if (prev && prev !== target) prev.classList.add('left');
+  }
+
+  target.classList.remove('left');
+  target.classList.add('active');
+
+  // Update header
+  backBtn.classList.toggle('visible', !!opts.back);
+  headerTitle.textContent = 'PuttPro';
+  headerContext.textContent = opts.context || screenContextFor(id);
+  if (opts.action) {
+    headerAction.textContent = opts.action;
+    headerAction.style.display = 'block';
+    headerAction.onclick = opts.onAction;
+  } else {
+    headerAction.style.display = 'none';
+    headerAction.onclick = null;
+  }
+}
+
+function screenContextFor(screenId) {
+  const map = {
+    'screen-home': 'History',
+    'screen-record': 'Session',
+    'screen-upload': 'Upload',
+    'screen-preview': 'Review',
+    'screen-uploading': 'Analyzing',
+    'screen-result': 'Result',
+    'screen-stats': 'Stats',
+  };
+  return map[screenId] || 'Session';
+}
+
+function navigate(screenId, opts = {}) {
+  if (opts.pushBack !== false) SCREEN_STACK.push(screenId);
+  showScreen(screenId, opts);
+}
+
+backBtn.addEventListener('click', () => {
+  const all = document.querySelectorAll('.screen.active, .screen.left');
+  all.forEach(s => { s.classList.remove('active', 'left'); });
+
+  // Pop the last screen
+  SCREEN_STACK.pop();
+  const prev = SCREEN_STACK[SCREEN_STACK.length - 1];
+  if (prev) {
+    showScreen(prev, { back: SCREEN_STACK.length > 1 });
+  } else {
+    // Back to tab root
+    showTab(currentTab);
+  }
+});
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function showTab(tab) {
+  currentTab = tab;
+  SCREEN_STACK.length = 0;
+
+  tabSession.classList.toggle('active', tab === 'session');
+  tabUpload.classList.toggle('active',  tab === 'upload');
+  tabHome.classList.toggle('active',    tab === 'home');
+  tabStats.classList.toggle('active',   tab === 'stats');
+
+  backBtn.classList.remove('visible');
+  headerAction.style.display = 'none';
+
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active', 'left'));
+
+  if (tab === 'home') {
+    showScreen('screen-home', { context: 'History', slide: false });
+    loadHistory();
+  } else if (tab === 'session') {
+    showScreen('screen-record', { context: 'Session', slide: false });
+    startCamera();
+  } else if (tab === 'upload') {
+    showScreen('screen-upload', { context: 'Upload', slide: false });
+    uploadFileName.textContent = 'No file selected';
+  } else if (tab === 'stats') {
+    showScreen('screen-stats', { context: 'Stats', slide: false });
+    loadMobileStats();
+  }
+
+  // Stop live session and camera when leaving the session tab
+  if (tab !== 'session') {
+    if (streamActive) stopLiveSession();
+    stopCamera();
+  }
+}
+
+tabSession.addEventListener('click', () => showTab('session'));
+tabUpload.addEventListener('click',  () => showTab('upload'));
+tabHome.addEventListener('click',    () => showTab('home'));
+tabStats.addEventListener('click',   () => showTab('stats'));
+
+// ── History ───────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  jobList.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div></div>';
+  try {
+    const res  = await fetch('/history');
+    const jobs = await res.json();
+
+    if (!jobs.length) {
+      jobList.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📹</div>
+          <div class="empty-msg">No videos yet.<br>Tap Record to capture your first putt.</div>
+        </div>`;
+      return;
+    }
+
+    jobList.innerHTML = '';
+    jobs.forEach(job => {
+      const card = document.createElement('div');
+      card.className = 'job-card';
+
+      const isWorking = !['done','error'].includes(job.status);
+      const date = job.created_at
+        ? new Date(job.created_at * 1000).toLocaleDateString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
+        : '';
+      const events = job.flight?.putt_events || [];
+      const eventMade = events.filter(e => e.result === 'made').length;
+      const eventMiss = events.filter(e => e.result === 'missed').length;
+      const totalPutts = eventMade + eventMiss;
+      const metaParts = [];
+      if (date) metaParts.push(date);
+      if (job.elapsed_s) metaParts.push(`${job.elapsed_s}s`);
+      if (totalPutts > 0) {
+        const pct = Math.round((eventMade / totalPutts) * 100);
+        metaParts.push(`${totalPutts} putts`);
+        metaParts.push(`${pct}% made`);
+      }
+
+      let statusClass = 'status-working';
+      let statusLabel = capitalise(job.status);
+      if (job.status === 'done')  { statusClass = 'status-done';  statusLabel = 'Done'; }
+      if (job.status === 'error') { statusClass = 'status-error'; statusLabel = 'Error'; }
+
+      card.innerHTML = `
+        <div class="job-thumb">
+          ${job.status === 'done'
+            ? `<video src="/result/${job.job_id}" muted preload="metadata" style="pointer-events:none"></video>`
+            : `<span style="font-size:22px">${isWorking ? '⏳' : '❌'}</span>`
+          }
+        </div>
+        <div class="job-info">
+          <div class="job-name">${esc(job.filename || job.job_id)}</div>
+          <div class="job-meta">${esc(metaParts.join(' · '))}</div>
+        </div>
+        <div class="job-status ${statusClass}">${esc(statusLabel)}</div>
+      `;
+
+      if (job.status === 'done') {
+        card.addEventListener('click', () => openResult(job));
+      } else if (isWorking) {
+        card.addEventListener('click', () => openProgress(job.job_id));
+      }
+
+      jobList.appendChild(card);
+    });
+  } catch (err) {
+    jobList.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-msg">${esc(err.message)}</div></div>`;
+  }
+}
+
+refreshBtn.addEventListener('click', loadHistory);
+
+// ── Upload tab (local file) ───────────────────────────────────────────────────
+uploadPickBtn.addEventListener('click', () => localVideoInput.click());
+
+localVideoInput.addEventListener('change', () => {
+  const file = localVideoInput.files?.[0];
+  if (!file) return;
+  uploadFileName.textContent = file.name;
+  recordedBlob = file;
+  goToPreview();
+});
+
+// ── Camera ────────────────────────────────────────────────────────────────────
+async function startCamera() {
+  stopCamera();
+  noCameraMsg.style.display = 'none';
+  noCameraTitle.textContent = 'Camera access unavailable.';
+  noCameraDetail.textContent = 'Allow camera access in your browser settings.';
+  updateRecordUi();
+  if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    noCameraMsg.style.display = 'flex';
+    noCameraTitle.textContent = 'Chrome blocked camera on HTTP.';
+    noCameraDetail.textContent = `For dev on Android Chrome: open chrome://flags/#unsafely-treat-insecure-origin-as-secure and add ${location.origin}, relaunch Chrome, then retry.`;
+    updateRecordUi();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    noCameraMsg.style.display = 'flex';
+    noCameraDetail.textContent = 'Camera API unavailable in this browser context.';
+    updateRecordUi();
+    return;
+  }
+  try {
+    const attempts = [
+      { video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } }, audio: false },
+      { video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+      { video: { facingMode }, audio: false },
+      { video: true, audio: false },
+    ];
+
+    let stream = null;
+    let lastErr = null;
+    for (const constraints of attempts) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!stream) throw lastErr || new Error('Unable to open camera');
+
+    mediaStream = stream;
+    cameraPreview.srcObject = stream;
+    await cameraPreview.play().catch(() => {});
+    noCameraMsg.style.display = 'none';
+    updateRecordUi();
+  } catch (err) {
+    noCameraMsg.style.display = 'flex';
+    const reason = err?.name ? ` (${err.name})` : '';
+    noCameraTitle.textContent = `Camera access failed${reason}`;
+    noCameraDetail.textContent = err?.message || 'Check browser site permissions and try again.';
+    updateRecordUi();
+  }
+}
+
+function stopCamera() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
+  cameraPreview.srcObject = null;
+  updateRecordUi();
+}
+
+flipBtn.addEventListener('click', () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  startCamera();
+});
+
+// ── Mode toggle ───────────────────────────────────────────────────────────────
+modeUploadBtn.addEventListener('click', () => {
+  if (liveMode && streamActive) return; // don't switch mid-session
+  liveMode = false;
+  modeUploadBtn.classList.add('active');
+  modeLiveBtn.classList.remove('active');
+  updateRecordUi();
+});
+
+modeLiveBtn.addEventListener('click', () => {
+  liveMode = true;
+  modeLiveBtn.classList.add('active');
+  modeUploadBtn.classList.remove('active');
+  updateRecordUi();
+});
+
+// ── Recording — dispatches to upload or live path ─────────────────────────────
+async function onRecordAction() {
+  if (!mediaStream) {
+    await startCamera();
+  }
+  if (!mediaStream) {
+    return;
+  }
+  if (liveMode) {
+    if (streamActive) {
+      stopLiveSession();
+    } else {
+      startLiveSession();
+    }
+  } else {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }
+}
+
+recordBtn.addEventListener('click', () => { onRecordAction(); });
+
+function startRecording() {
+  const mimeType = getSupportedMime();
+  const chunks   = [];
+
+  try {
+    mediaRecorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : {});
+  } catch {
+    mediaRecorder = new MediaRecorder(mediaStream);
+  }
+
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    const mime = mediaRecorder.mimeType || 'video/webm';
+    recordedBlob = new Blob(chunks, { type: mime });
+    goToPreview();
+  };
+
+  mediaRecorder.start(250); // collect every 250ms
+  recordBtn.classList.add('recording');
+  timerSecs = 0;
+  recordTimer.textContent = '0:00';
+  recordTimer.classList.add('visible');
+  timerInterval = setInterval(() => {
+    timerSecs++;
+    const m = Math.floor(timerSecs / 60);
+    const s = String(timerSecs % 60).padStart(2, '0');
+    recordTimer.textContent = `${m}:${s}`;
+  }, 1000);
+  updateRecordUi();
+}
+
+function stopRecording() {
+  clearInterval(timerInterval);
+  recordTimer.classList.remove('visible');
+  recordBtn.classList.remove('recording');
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  updateRecordUi();
+}
+
+function getSupportedMime() {
+  const candidates = [
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ];
+  for (const m of candidates) {
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return '';
+}
+
+// ── Live streaming session ────────────────────────────────────────────────────
+async function startLiveSession() {
+  if (!mediaStream) return;
+
+  try {
+    const res  = await fetch('/stream/start', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ conf: 0.35, imgsz: 320 }),
+    });
+    const { session_id } = await res.json();
+    streamSessionId = session_id;
+  } catch (err) {
+    showToast('Could not start session: ' + err.message);
+    return;
+  }
+
+  streamChunkIdx = 0;
+  streamActive   = true;
+  sessionSecs    = 0;
+  liveSummary    = { total_putts: 0, made: 0, missed: 0 };
+
+  // UI
+  recordBtn.classList.add('recording');
+  liveHud.classList.add('visible');
+  updateLiveHud();
+  sessionTimer = setInterval(() => {
+    sessionSecs++;
+    const m = Math.floor(sessionSecs / 60);
+    const s = String(sessionSecs % 60).padStart(2, '0');
+    liveSessionTime.textContent = `${m}:${s}`;
+  }, 1000);
+
+  // Subscribe to server SSE for chunk results
+  if (streamSse) streamSse.close();
+  streamSse = new EventSource(`/stream/status/${streamSessionId}`);
+  streamSse.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === 'chunk_done') {
+      if (ev.live_summary) {
+        liveSummary = ev.live_summary;
+        updateLiveHud();
+      }
+    }
+    if (ev.type === 'session_done') {
+      streamSse.close();
+    }
+  };
+
+  recordChunk();
+  updateRecordUi();
+}
+
+function recordChunk() {
+  if (!streamActive || !mediaStream) return;
+
+  const mime   = getSupportedMime();
+  const chunks = [];
+  try {
+    chunkRecorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : {});
+  } catch {
+    chunkRecorder = new MediaRecorder(mediaStream);
+  }
+
+  chunkRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  chunkRecorder.onstop = () => {
+    const type = chunkRecorder.mimeType || 'video/webm';
+    const blob = new Blob(chunks, { type });
+    if (blob.size > 500) {                      // skip near-empty segments
+      uploadStreamChunk(blob, streamChunkIdx++);
+    }
+    if (streamActive) recordChunk();            // start next chunk immediately
+  };
+
+  chunkRecorder.start();
+  chunkTimer = setTimeout(() => {
+    if (chunkRecorder?.state === 'recording') chunkRecorder.stop();
+  }, CHUNK_INTERVAL);
+}
+
+function uploadStreamChunk(blob, idx) {
+  if (!streamSessionId) return;
+  const ext  = blob.type.includes('mp4') ? '.mp4' : '.webm';
+  const file = new File([blob], `chunk_${idx}${ext}`, { type: blob.type });
+  const fd   = new FormData();
+  fd.append('chunk',     file);
+  fd.append('chunk_idx', idx);
+  fd.append('mime',      blob.type);
+  fetch(`/stream/chunk/${streamSessionId}`, { method: 'POST', body: fd })
+    .catch(() => {});
+}
+
+function stopLiveSession() {
+  streamActive = false;
+  clearTimeout(chunkTimer);
+  clearInterval(sessionTimer);
+
+  if (chunkRecorder?.state === 'recording') {
+    chunkRecorder.stop();
+  }
+
+  recordBtn.classList.remove('recording');
+  liveHud.classList.remove('visible');
+  showToast('Saving video...');
+  updateRecordUi();
+
+  // Give the last chunk time to upload before telling server we're done
+  setTimeout(() => {
+    if (streamSessionId) {
+      fetch(`/stream/stop/${streamSessionId}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data?.job_id) {
+            addMyJob(data.job_id);
+            showToast(`Session saved. Processing job ${data.job_id.slice(0, 8)}...`);
+          }
+        })
+        .catch(() => {});
+    }
+    const { total_putts: tp, made, missed } = liveSummary;
+    showToast(`Session: ${tp} putts · ${made} made · ${missed} missed`);
+    streamSessionId = null;
+    updateRecordUi();
+  }, 3500);
+}
+function updateLiveHud() {
+  livePutts.textContent  = liveSummary.total_putts;
+  liveMade.textContent   = liveSummary.made;
+  liveMissed.textContent = liveSummary.missed;
+}
+
+function updateRecordUi() {
+  const label = liveMode
+    ? (streamActive ? 'Stop Session' : 'Start Session')
+    : (mediaRecorder && mediaRecorder.state === 'recording' ? 'Stop Recording' : 'Record');
+  recordBtn.title = label;
+  recordBtn.setAttribute('aria-label', label);
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+function goToPreview() {
+  if (!recordedBlob) return;
+  const url = URL.createObjectURL(recordedBlob);
+  previewVideo.src = url;
+
+  SCREEN_STACK.length = 0;
+  SCREEN_STACK.push('screen-preview');
+  showScreen('screen-preview', {
+    title:    'Review',
+    back:     true,
+    action:   null,
+  });
+
+  // Stop live camera while previewing (save battery)
+  stopCamera();
+}
+
+// Resume camera when going back from preview
+backBtn.addEventListener('click', () => {
+  if (currentTab === 'session') {
+    // We came from record screen
+    startCamera();
+  }
+}, { capture: true }); // capture so we can check before navigation handler
+
+mConfRange.addEventListener('input', () => mConfVal.textContent = mConfRange.value);
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+uploadBtn.addEventListener('click', async () => {
+  if (!recordedBlob) return;
+
+  uploadBtn.disabled = true;
+
+  // Determine extension from MIME type
+  const mime = recordedBlob.type || 'video/webm';
+  const ext  = mime.includes('mp4') ? '.mp4' : '.webm';
+  const file = new File([recordedBlob], `putt_${Date.now()}${ext}`, { type: mime });
+
+  const fd = new FormData();
+  fd.append('video',      file);
+  fd.append('conf',       mConfRange.value);
+  fd.append('imgsz',      mImgsz.value);
+  fd.append('frame_skip', mSkip.value);
+
+  // Switch to uploading screen
+  uploadIcon.textContent    = '📤';
+  uploadLabel.textContent   = 'Uploading...';
+  uploadSubLabel.textContent = '';
+  uploadPipeline.textContent = 'Pipeline: creating analysis job';
+  uploadFill.style.width    = '0%';
+  uploadFps.textContent     = '';
+
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active', 'left'));
+  showScreen('screen-uploading', { title: 'Analyzing…', slide: false });
+
+  let jobId;
+  try {
+    const res  = await fetch('/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || !data.job_id) throw new Error(data.error || 'Upload failed');
+    jobId = data.job_id;
+  } catch (err) {
+    showToast('Upload failed: ' + err.message);
+    uploadBtn.disabled = false;
+    goToPreview();
+    return;
+  }
+
+  addMyJob(jobId);
+  currentJobId = jobId;
+  listenProgress(jobId);
+});
+
+// ── Re-open in-progress job from history ─────────────────────────────────────
+function openProgress(jobId) {
+  currentJobId = jobId;
+  uploadIcon.textContent    = '⚙️';
+  uploadLabel.textContent   = 'Processing...';
+  uploadSubLabel.textContent = '';
+  uploadPipeline.textContent = 'Pipeline: reconnecting to job updates';
+  uploadFill.style.width    = '0%';
+  uploadFps.textContent     = '';
+
+  SCREEN_STACK.length = 0;
+  SCREEN_STACK.push('screen-uploading');
+  showScreen('screen-uploading', { title: 'Analyzing…', back: true, slide: false });
+  listenProgress(jobId);
+}
+
+// ── SSE progress ──────────────────────────────────────────────────────────────
+function listenProgress(jobId) {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource(`/status/${jobId}`);
+
+  sseSource.onmessage = e => {
+    const job = JSON.parse(e.data);
+
+    if (job.error && job.status === 'error') {
+      sseSource.close();
+      uploadPipeline.textContent = `Pipeline: failed - ${job.error}`;
+      showToast('Error: ' + job.error);
+      showTab('home');
+      return;
+    }
+
+    const pct = Math.round((job.progress || 0) * 100);
+    uploadFill.style.width = pct + '%';
+
+    const labels = {
+      queued:        'Queued...',
+      loading_model: 'Loading model...',
+      processing:    `Analyzing frames - ${pct}%`,
+      encoding:      'Encoding video...',
+      done:          'Complete!',
+    };
+    const stageMsg = job.pipeline_message || labels[job.status] || 'Working...';
+    const hasFrameProgress = Number(job.frames_done || 0) > 0;
+    const preFrameStage = job.status === 'processing' && !hasFrameProgress;
+    uploadLabel.textContent = preFrameStage ? stageMsg : (labels[job.status] || capitalise(job.status));
+    uploadPipeline.textContent = `Pipeline: ${stageMsg}`;
+
+    if (job.inference_fps) {
+      uploadFps.textContent = job.inference_fps + ' frames/sec';
+    }
+    if (job.total_frames && job.frames_done) {
+      uploadSubLabel.textContent = `${job.frames_done} / ${job.total_frames} frames`;
+    } else if (job.status !== 'done') {
+      uploadSubLabel.textContent = stageMsg;
+    }
+
+    if (job.status === 'done') {
+      sseSource.close();
+      uploadIcon.textContent  = '✅';
+      uploadLabel.textContent = 'Done!';
+      uploadPipeline.textContent = 'Pipeline: analysis complete';
+      setTimeout(() => openResult(job), 600);
+    }
+  };
+
+  sseSource.onerror = () => {
+    sseSource.close();
+    // Try to poll once in case it completed
+    fetch(`/history`)
+      .then(r => r.json())
+      .then(jobs => {
+        const job = jobs.find(j => j.job_id === jobId);
+        if (job?.status === 'done') {
+          openResult(job);
+        } else if (job?.status === 'error') {
+          uploadPipeline.textContent = `Pipeline: failed - ${job.error || 'unknown error'}`;
+          showToast('Processing error');
+          showTab('home');
+        } else {
+          uploadPipeline.textContent = 'Pipeline: reconnecting...';
+        }
+      })
+      .catch(() => {});
+  };
+}
+
+// ── Result screen ─────────────────────────────────────────────────────────────
+function openResult(job) {
+  const jobId  = job.job_id;
+  currentJobId = jobId;
+  currentResultJob = job;
+  depthModeActive = false;
+
+  resultVideo.src = `/result/${jobId}?t=${Date.now()}`;
+
+  resultDlBtn.href     = `/download/${jobId}`;
+  resultDlBtn.download = (job.filename ? job.filename.replace(/\.[^.]+$/, '') : jobId) + '_analyzed.mp4';
+  depthToggleBtn.disabled = !job.has_depth;
+  depthToggleBtn.textContent = job.has_depth ? 'View Depth' : 'Depth Unavailable';
+  depthToggleBtn.classList.remove('active-mode');
+
+  // Putt result banner
+  const banner     = $('putt-banner');
+  const bannerIcon = $('putt-banner-icon');
+  const bannerLbl  = $('putt-banner-label');
+  const bannerSub  = $('putt-banner-sub');
+  const result     = job.putt_result || job.summary?.putt_result || 'unknown';
+  const flight     = job.flight || {};
+  const events     = Array.isArray(flight.putt_events) ? flight.putt_events : [];
+  const madeEvents = events.filter(e => e.result === 'made').length;
+  const missEvents = events.filter(e => e.result === 'missed').length;
+  const totalEvents = madeEvents + missEvents;
+  const makePct = totalEvents ? Math.round((madeEvents / totalEvents) * 100) : 0;
+
+  if (result !== 'unknown') {
+    const isMade = result === 'made';
+    banner.style.display    = 'block';
+    banner.style.background = isMade ? 'rgba(106,153,85,0.15)' : 'rgba(244,71,71,0.12)';
+    banner.style.border     = `1px solid ${isMade ? '#6a9955' : '#f44747'}44`;
+    bannerIcon.textContent  = isMade ? '🎯' : '❌';
+    bannerLbl.textContent   = isMade ? 'Made!' : 'Missed';
+    bannerLbl.style.color   = isMade ? '#6a9955' : '#f44747';
+    const subParts = [];
+    if (totalEvents) subParts.push(`${totalEvents} putts`);
+    if (totalEvents) subParts.push(`${madeEvents} made`);
+    if (totalEvents) subParts.push(`${missEvents} missed`);
+    if (!subParts.length && flight.speed_px_s != null) subParts.push(`${Math.round(flight.speed_px_s)} px/s`);
+    bannerSub.textContent = subParts.join(' · ');
+  } else {
+    banner.style.display = 'none';
+  }
+
+  // Session stats row (more meaningful than angle/disc detections)
+  const s = job.summary || {};
+  const speed = flight.speed_px_s != null ? Math.round(flight.speed_px_s) : '—';
+  resultStats.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--teal)">${totalEvents || '—'}</div>
+      <div class="stat-label">Putts</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:#6a9955">${totalEvents ? madeEvents : '—'}</div>
+      <div class="stat-label">Made</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--orange)">${totalEvents ? makePct + '%' : speed}</div>
+      <div class="stat-label">${totalEvents ? 'Make %' : 'Speed'}</div>
+    </div>
+  `;
+
+  // Putt timeline with timestamp seek controls
+  if (events.length) {
+    puttTimelineBody.innerHTML = events.map((ev, idx) => {
+      const ts = Number(ev.timestamp_s || 0);
+      const lbl = ev.timestamp_label || formatTs(ts);
+      const res = esc(ev.result || 'unknown');
+      const badgeClass = res === 'made' ? 'badge-made' : res === 'missed' ? 'badge-missed' : 'badge-unknown';
+      const speedMeta = ev.speed_px_s != null ? `${Math.round(ev.speed_px_s)} px/s` : '—';
+      return `
+        <button class="timeline-item" data-ts="${ts}">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+            <span class="timeline-time">${lbl}</span>
+            <span class="badge ${badgeClass}">${res}</span>
+          </div>
+          <span class="timeline-meta">${speedMeta}</span>
+        </button>
+      `;
+    }).join('');
+    puttTimelinePanel.style.display = 'block';
+    [...puttTimelineBody.querySelectorAll('.timeline-item')].forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ts = Number(btn.dataset.ts || 0);
+        resultVideo.currentTime = Math.max(0, ts);
+        resultVideo.play().catch(() => {});
+      });
+    });
+  } else {
+    puttTimelinePanel.style.display = 'none';
+    puttTimelineBody.innerHTML = '';
+  }
+
+  SCREEN_STACK.length = 0;
+  SCREEN_STACK.push('screen-result');
+  showScreen('screen-result', {
+    context: 'Result',
+    back:  true,
+    slide: false,
+  });
+}
+
+depthToggleBtn.addEventListener('click', () => {
+  if (!currentResultJob?.has_depth) return;
+  setDepthMode(!depthModeActive);
+});
+
+function setDepthMode(enableDepth) {
+  if (!currentResultJob) return;
+  if (enableDepth && !currentResultJob.has_depth) return;
+
+  const seekTo = resultVideo.currentTime || 0;
+  const wasPlaying = !resultVideo.paused;
+  depthModeActive = enableDepth;
+
+  const jobId = currentResultJob.job_id;
+  const src = depthModeActive
+    ? `/result_depth/${jobId}?t=${Date.now()}`
+    : `/result/${jobId}?t=${Date.now()}`;
+
+  depthToggleBtn.textContent = depthModeActive ? 'View Video' : 'View Depth';
+  depthToggleBtn.classList.toggle('active-mode', depthModeActive);
+
+  resultVideo.src = src;
+  resultVideo.load();
+  resultVideo.addEventListener('loadedmetadata', () => {
+    if (seekTo > 0) {
+      resultVideo.currentTime = Math.min(seekTo, Math.max(0, (resultVideo.duration || seekTo) - 0.05));
+    }
+    if (wasPlaying) resultVideo.play().catch(() => {});
+  }, { once: true });
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function capitalise(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : '';
+}
+function formatTs(sec) {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// ── Mobile stats ──────────────────────────────────────────────────────────────
+async function loadMobileStats() {
+  try {
+    const res  = await fetch('/stats');
+    const d    = await res.json();
+    renderMobileStats(d);
+  } catch { /* silent */ }
+}
+
+function renderMobileStats(d) {
+  $('m-kpi-total').textContent  = d.total_putts;
+  $('m-kpi-pct').textContent    = d.total_putts ? d.make_pct + '%' : '—';
+  $('m-kpi-made').textContent   = d.made;
+  $('m-kpi-missed').textContent = d.missed;
+
+  // Mini trend chart
+  const canvas = $('m-trend-chart');
+  const pts    = d.rolling_pct;
+  const n      = pts.length;
+  const W      = canvas.parentElement.clientWidth - 28;
+  const H      = 140;
+  canvas.width  = W;
+  canvas.height = H;
+  const ctx  = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  if (n < 2) {
+    ctx.fillStyle = '#6a6a6a'; ctx.font = '12px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(n === 0 ? 'No putts yet' : 'Need more putts', W / 2, H / 2);
+  } else {
+    const pad = { top: 8, right: 8, bottom: 20, left: 34 };
+    const cW  = W - pad.left - pad.right;
+    const cH  = H - pad.top  - pad.bottom;
+    const xOf = i => pad.left + (i / (n - 1)) * cW;
+    const yOf = v => pad.top  + cH - (v / 100) * cH;
+
+    // Grid
+    ctx.strokeStyle = '#3e3e42'; ctx.lineWidth = 1;
+    ctx.fillStyle   = '#6a6a6a'; ctx.font = '9px system-ui'; ctx.textAlign = 'right';
+    [0, 50, 100].forEach(v => {
+      ctx.beginPath(); ctx.moveTo(pad.left, yOf(v)); ctx.lineTo(pad.left + cW, yOf(v)); ctx.stroke();
+      ctx.fillText(v + '%', pad.left - 3, yOf(v) + 3);
+    });
+
+    // Area
+    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + cH);
+    grad.addColorStop(0, 'rgba(0,122,204,0.4)');
+    grad.addColorStop(1, 'rgba(0,122,204,0.02)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    pts.forEach((v, i) => i === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v)));
+    ctx.lineTo(xOf(n - 1), pad.top + cH); ctx.lineTo(xOf(0), pad.top + cH);
+    ctx.closePath(); ctx.fill();
+
+    // Line
+    ctx.strokeStyle = '#007acc'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    pts.forEach((v, i) => i === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v)));
+    ctx.stroke();
+
+    // Dots
+    pts.forEach((v, i) => {
+      const r = d.series[i]?.putt_result;
+      ctx.fillStyle = r === 'made' ? '#6a9955' : r === 'missed' ? '#f44747' : '#6a6a6a';
+      ctx.beginPath(); ctx.arc(xOf(i), yOf(v), 3.5, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+
+  // Recent putts list
+  const list = $('m-putt-list');
+  const rows = [...d.series].reverse().slice(0, 10);
+  if (!rows.length) {
+    list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">No putts yet</div>';
+    return;
+  }
+  list.innerHTML = rows.map(r => {
+    const color = r.putt_result === 'made' ? '#6a9955' : r.putt_result === 'missed' ? '#f44747' : '#6a6a6a';
+    const icon  = r.putt_result === 'made' ? '✓' : r.putt_result === 'missed' ? '✗' : '?';
+    const date  = r.created_at
+      ? new Date(r.created_at * 1000).toLocaleDateString([], {month:'short',day:'numeric'})
+      : '';
+    const tsLbl = r.timestamp_label ? ` · ${r.timestamp_label}` : '';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.04)">
+      <div style="width:28px;height:28px;border-radius:50%;background:${color}22;color:${color};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0">${icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.filename || r.job_id)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${date}${tsLbl}</div>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:${color};text-transform:uppercase">${r.putt_result}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+showTab('session');
+updateRecordUi();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

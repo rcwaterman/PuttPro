@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PuttPro — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* ── Background layers ── */
+      --bg:       #1e1e1e;
+      --surface:  #252526;
+      --surface2: #2d2d30;
+      --border:   #3e3e42;
+
+      /* ── Data palette — blue + amber ── */
+      --blue:     #007acc;
+      --blue-lt:  #1a85ff;
+      --blue-dim: #005f9e;
+      --amber:    #ce9178;
+      --amber-lt: #d7a794;
+      --amber-dim:#9f6d59;
+      --violet:   #4ec9b0;
+      --teal:     #4ec9b0;
+      --slate:    #6a6a6a;
+
+      /* ── Typography ── */
+      --text:     #d4d4d4;
+      --text-dim: #9d9d9d;
+      --muted:    #6a6a6a;
+
+      --radius: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      line-height: 1.4;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-left { display: flex; align-items: center; gap: 24px; }
+    .logo {
+      font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--blue-lt), var(--amber-lt));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    nav { display: flex; gap: 2px; }
+    nav a {
+      padding: 6px 14px; border-radius: 6px; text-decoration: none;
+      color: var(--text-dim); font-size: 13px; font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+    }
+    nav a:hover  { background: var(--surface2); color: var(--text); }
+    nav a.active { background: rgba(59,130,246,0.15); color: var(--blue-lt); font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    #last-updated { font-size: 12px; color: var(--muted); }
+    .btn-refresh {
+      background: var(--blue-dim);
+      color: #fff; border: none; border-radius: 6px;
+      padding: 6px 14px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .btn-refresh:hover { background: var(--blue); }
+
+    /* ── Layout ──────────────────────────────────────────────────────────────── */
+    main {
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    /* ── KPI strip ───────────────────────────────────────────────────────────── */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 20px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: var(--kpi-stripe, var(--blue));
+    }
+    .kpi-label {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); margin-bottom: 10px;
+    }
+    .kpi-value {
+      font-size: 36px; font-weight: 800; line-height: 1;
+      color: var(--kpi-color, var(--text));
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+
+    /* ── Panels ──────────────────────────────────────────────────────────────── */
+    .row { display: grid; gap: 20px; }
+    .row-2   { grid-template-columns: 1fr 1fr; }
+    .row-21  { grid-template-columns: 2fr 1fr; }
+    .row-3   { grid-template-columns: 1fr 1fr 1fr; }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .panel-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .09em; color: var(--muted);
+    }
+
+    /* ── Canvas wrapper: fills panel width ──────────────────────────────────── */
+    .chart-wrap { position: relative; width: 100%; }
+    .chart-wrap canvas { display: block; width: 100% !important; }
+
+    /* ── Gauge panel ─────────────────────────────────────────────────────────── */
+    .gauge-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+    }
+    .gauge-legend { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+    .legend-row {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 13px;
+    }
+    .legend-row-left { display: flex; align-items: center; gap: 8px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-bar-wrap {
+      height: 4px; flex: 1; background: var(--surface2); border-radius: 99px;
+      margin: 0 10px; overflow: hidden;
+    }
+    .legend-bar { height: 100%; border-radius: 99px; transition: width 0.5s ease; }
+    .legend-count { font-weight: 700; min-width: 24px; text-align: right; }
+
+    /* ── Table ───────────────────────────────────────────────────────────────── */
+    .data-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .data-table thead th {
+      text-align: left; padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: .07em;
+    }
+    .data-table tbody tr { transition: background 0.1s; }
+    .data-table tbody tr:hover { background: var(--surface2); }
+    .data-table tbody td {
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .badge {
+      display: inline-block; padding: 3px 9px; border-radius: 99px;
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .05em;
+    }
+    .badge-made    { background: rgba(59,130,246,0.18);  color: var(--blue-lt); }
+    .badge-missed  { background: rgba(245,158,11,0.18);  color: var(--amber-lt); }
+    .badge-unknown { background: rgba(51,65,85,0.5);     color: var(--muted); }
+
+    /* ── Empty state ─────────────────────────────────────────────────────────── */
+    .empty {
+      text-align: center; padding: 56px 24px;
+      color: var(--muted); font-size: 14px; line-height: 1.7;
+    }
+    .empty a { color: var(--blue-lt); text-decoration: none; }
+
+    /* ── Responsive ──────────────────────────────────────────────────────────── */
+    @media (max-width: 1024px) {
+      .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+      .row-21, .row-3 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      main { padding: 16px; gap: 14px; }
+      .kpi-strip { grid-template-columns: 1fr 1fr; }
+      .row-2 { grid-template-columns: 1fr; }
+      header { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">PuttPro</div>
+    <nav>
+      <a href="/">Analyze</a>
+      <a href="/dashboard" class="active">Dashboard</a>
+    </nav>
+  </div>
+  <div class="header-right">
+    <span id="last-updated">Loading…</span>
+    <button class="btn-refresh" onclick="loadStats()">Refresh</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPI strip -->
+  <div class="kpi-strip">
+    <div class="kpi-card" style="--kpi-stripe:var(--blue)">
+      <div class="kpi-label">Total Putts</div>
+      <div class="kpi-value" id="kpi-total">—</div>
+      <div class="kpi-sub">detected putt events</div>
+    </div>
+    <div class="kpi-card" style="--kpi-stripe:var(--blue-lt);--kpi-color:var(--blue-lt)">
+      <div class="kpi-label">Made</div>
+      <div class="kpi-value" id="kpi-made">—</div>
+      <div class="kpi-sub" id="kpi-made-sub"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-stripe:var(--amber);--kpi-color:var(--amber)">
+      <div class="kpi-label">Missed</div>
+      <div class="kpi-value" id="kpi-missed">—</div>
+      <div class="kpi-sub" id="kpi-missed-sub"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-stripe:var(--teal);--kpi-color:var(--teal)">
+      <div class="kpi-label">Make %</div>
+      <div class="kpi-value" id="kpi-pct">—</div>
+      <div class="kpi-sub">all time</div>
+    </div>
+    <div class="kpi-card" style="--kpi-stripe:var(--violet);--kpi-color:var(--violet)">
+      <div class="kpi-label">Rolling (10)</div>
+      <div class="kpi-value" id="kpi-rolling">—</div>
+      <div class="kpi-sub">last 10-putt make %</div>
+    </div>
+  </div>
+
+  <!-- Trend + Make breakdown -->
+  <div class="row row-21">
+    <div class="panel">
+      <div class="panel-title">Make % Over Time — rolling 10-putt window</div>
+      <div class="chart-wrap" id="trend-wrap">
+        <canvas id="trend-chart" height="220"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Result Breakdown</div>
+      <div class="gauge-wrap">
+        <canvas id="gauge-chart" width="180" height="180" style="width:180px;height:180px;display:block;margin:0 auto"></canvas>
+        <div class="gauge-legend" id="gauge-legend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flight data charts -->
+  <div class="row row-3">
+    <div class="panel">
+      <div class="panel-title">Flight Angle per Putt (°)</div>
+      <div class="chart-wrap" id="angle-wrap">
+        <canvas id="angle-chart" height="160"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Disc Speed per Putt (px/s)</div>
+      <div class="chart-wrap" id="speed-wrap">
+        <canvas id="speed-chart" height="160"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Disc Detected Frames per Putt</div>
+      <div class="chart-wrap" id="frames-wrap">
+        <canvas id="frames-chart" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent putts table -->
+  <div class="panel">
+    <div class="panel-title">Recent Putts</div>
+    <div id="table-wrap"></div>
+  </div>
+
+</main>
+
+<script>
+// ── HiDPI canvas helper ───────────────────────────────────────────────────────
+function hiDPI(canvas, cssW, cssH) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = cssW * dpr;
+  canvas.height = cssH * dpr;
+  canvas.style.width  = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return ctx;
+}
+
+// ── Colors ────────────────────────────────────────────────────────────────────
+const C = {
+  made:    '#6a9955',
+  madeLt:  '#7fb86a',
+  missed:  '#f44747',
+  missedLt:'#ff6b6b',
+  unknown: '#6a6a6a',
+  trend:   '#4ec9b0',
+  bg:      '#1e1e1e',
+  surface: '#252526',
+  border:  '#3e3e42',
+  text:    '#d4d4d4',
+  dim:     '#9d9d9d',
+  muted:   '#6a6a6a',
+};
+
+// ── Data store ────────────────────────────────────────────────────────────────
+let statsData = null;
+
+async function loadStats() {
+  try {
+    const res = await fetch('/stats');
+    statsData  = await res.json();
+    renderAll(statsData);
+    document.getElementById('last-updated').textContent =
+      'Updated ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  } catch {
+    document.getElementById('last-updated').textContent = 'Could not load data';
+  }
+}
+
+function renderAll(d) {
+  renderKPIs(d);
+  renderTrendChart(d);
+  renderGauge(d);
+  renderPuttChart('angle-chart', 'angle-wrap',  d, 'angle_deg',   '°',    C.madeLt);
+  renderPuttChart('speed-chart', 'speed-wrap',  d, 'speed_px_s',  'px/s', C.trend);
+  renderPuttChart('frames-chart','frames-wrap',  d, 'disc_frames', '',     C.missed);
+  renderTable(d);
+}
+
+// ── KPIs ─────────────────────────────────────────────────────────────────────
+function renderKPIs(d) {
+  const pct = d.total_putts ? d.make_pct + '%' : '—';
+  setText('kpi-total',  d.total_putts || '—');
+  setText('kpi-made',   d.made   || (d.total_putts ? 0 : '—'));
+  setText('kpi-missed', d.missed || (d.total_putts ? 0 : '—'));
+  setText('kpi-pct',    pct);
+  setText('kpi-made-sub',   d.total_putts ? pctOf(d.made,   d.total_putts) + ' of putts' : '');
+  setText('kpi-missed-sub', d.total_putts ? pctOf(d.missed, d.total_putts) + ' of putts' : '');
+
+  const r = d.rolling_pct;
+  setText('kpi-rolling', r.length ? r[r.length - 1] + '%' : '—');
+}
+
+// ── Trend chart ───────────────────────────────────────────────────────────────
+function renderTrendChart(d) {
+  const canvas = document.getElementById('trend-chart');
+  const wrap   = document.getElementById('trend-wrap');
+  const cssW   = wrap.clientWidth || 600;
+  const cssH   = 220;
+
+  if (!d.series.length) { return drawEmpty(canvas, cssW, cssH, 'No data yet'); }
+
+  const ctx  = hiDPI(canvas, cssW, cssH);
+  const pad  = { top: 20, right: 16, bottom: 32, left: 46 };
+  const W    = cssW - pad.left - pad.right;
+  const H    = cssH - pad.top  - pad.bottom;
+  const pts  = d.rolling_pct;
+  const n    = pts.length;
+
+  // Grid + Y labels
+  ctx.font      = '11px system-ui';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  [0, 25, 50, 75, 100].forEach(v => {
+    const y = pad.top + H - (v / 100) * H;
+    ctx.strokeStyle = v === 50 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)';
+    ctx.lineWidth   = v === 50 ? 1.5 : 1;
+    ctx.setLineDash(v === 50 ? [4, 4] : []);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + W, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = C.muted;
+    ctx.fillText(v + '%', pad.left - 8, y);
+  });
+
+  if (n < 2) {
+    ctx.fillStyle = C.muted; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Add more putts to see trend', pad.left + W / 2, pad.top + H / 2);
+    return;
+  }
+
+  const xOf = i => pad.left + (i / (n - 1)) * W;
+  const yOf = v => pad.top  + H - (v / 100)  * H;
+
+  // Area gradient
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + H);
+  grad.addColorStop(0, 'rgba(139,92,246,0.30)');
+  grad.addColorStop(1, 'rgba(139,92,246,0.01)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), yOf(pts[0]));
+  pts.forEach((v, i) => { if (i > 0) ctx.lineTo(xOf(i), yOf(v)); });
+  ctx.lineTo(xOf(n - 1), pad.top + H);
+  ctx.lineTo(xOf(0),     pad.top + H);
+  ctx.closePath();
+  ctx.fill();
+
+  // Line
+  ctx.strokeStyle = C.trend; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  pts.forEach((v, i) => i === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v)));
+  ctx.stroke();
+
+  // Dots — colored by result
+  pts.forEach((v, i) => {
+    const r = d.series[i]?.putt_result;
+    const col = r === 'made' ? C.made : r === 'missed' ? C.missed : C.unknown;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(xOf(i), yOf(v), 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = C.surface; ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+
+  // X axis date labels
+  ctx.fillStyle = C.muted; ctx.font = '10px system-ui';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const step = Math.max(1, Math.floor(n / 8));
+  d.series.forEach((pt, i) => {
+    if (i % step !== 0 && i !== n - 1) return;
+    const lbl = pt.created_at
+      ? new Date(pt.created_at * 1000).toLocaleDateString([], {month:'short', day:'numeric'})
+      : '#' + (i + 1);
+    ctx.fillText(lbl, xOf(i), pad.top + H + 8);
+  });
+}
+
+// ── Gauge (arc + legend bars) ─────────────────────────────────────────────────
+function renderGauge(d) {
+  const canvas = document.getElementById('gauge-chart');
+  const cssW = 180, cssH = 180;
+  const ctx = hiDPI(canvas, cssW, cssH);
+  const cx = 90, cy = 90, r = 72, strokeW = 14;
+
+  const total   = d.total_putts || 0;
+  const makePct = total ? d.make_pct / 100 : 0;
+
+  // Background arc (full ring)
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth   = strokeW;
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI * 1.5);
+  ctx.stroke();
+
+  // Missed arc (amber)
+  if (d.missed > 0) {
+    const start = -Math.PI / 2;
+    const end   = start + (d.missed / Math.max(total, 1)) * Math.PI * 2;
+    ctx.strokeStyle = C.missed;
+    ctx.lineWidth   = strokeW;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, start, end);
+    ctx.stroke();
+  }
+
+  // Made arc (blue) — draws on top
+  if (d.made > 0) {
+    const start = -Math.PI / 2;
+    const end   = start + (d.made / Math.max(total, 1)) * Math.PI * 2;
+    ctx.strokeStyle = C.made;
+    ctx.lineWidth   = strokeW;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, start, end);
+    ctx.stroke();
+  }
+
+  // Center text
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle    = C.text;
+  ctx.font         = 'bold 28px system-ui';
+  ctx.fillText(total ? d.make_pct + '%' : '—', cx, cy - 10);
+  ctx.fillStyle = C.muted;
+  ctx.font      = '11px system-ui';
+  ctx.fillText('make rate', cx, cy + 14);
+
+  // Legend bars
+  const legend = document.getElementById('gauge-legend');
+  const segments = [
+    { label: 'Made',    count: d.made,    color: C.made,    total },
+    { label: 'Missed',  count: d.missed,  color: C.missed,  total },
+    { label: 'Unknown', count: d.unknown, color: C.unknown, total },
+  ].filter(s => s.count > 0);
+
+  legend.innerHTML = segments.map(s => {
+    const w = total ? Math.round(s.count / total * 100) : 0;
+    return `
+      <div class="legend-row">
+        <div class="legend-row-left">
+          <div class="legend-dot" style="background:${s.color}"></div>
+          <span style="color:var(--text-dim)">${s.label}</span>
+        </div>
+        <div class="legend-bar-wrap">
+          <div class="legend-bar" style="width:${w}%;background:${s.color}"></div>
+        </div>
+        <span class="legend-count" style="color:${s.color}">${s.count}</span>
+      </div>`;
+  }).join('');
+}
+
+// ── Per-putt bar chart ────────────────────────────────────────────────────────
+function renderPuttChart(canvasId, wrapId, d, field, unit, baseColor) {
+  const canvas = document.getElementById(canvasId);
+  const wrap   = document.getElementById(wrapId);
+  const cssW   = wrap.clientWidth || 320;
+  const cssH   = 160;
+  const pts    = d.series.filter(p => p[field] != null);
+
+  if (!pts.length) { return drawEmpty(canvas, cssW, cssH, 'No data'); }
+
+  const ctx  = hiDPI(canvas, cssW, cssH);
+  const pad  = { top: 8, right: 8, bottom: 28, left: 46 };
+  const W    = cssW - pad.left - pad.right;
+  const H    = cssH - pad.top  - pad.bottom;
+  const vals = pts.map(p => p[field]);
+  const mn   = Math.min(...vals);
+  const mx   = Math.max(...vals);
+  const rng  = mx - mn || 1;
+  const n    = pts.length;
+  const bw   = Math.max(3, Math.min(20, W / n - 3));
+
+  const xOf = i => pad.left + (i / Math.max(n - 1, 1)) * W;
+  const yOf = v => pad.top  + H - ((v - mn) / rng) * H;
+
+  // Grid
+  ctx.font = '10px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  const ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const v = mn + rng * (i / ticks);
+    const y = yOf(v);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + W, y); ctx.stroke();
+    ctx.fillStyle = C.muted;
+    ctx.fillText(Math.round(v) + (i === ticks ? ' ' + unit : ''), pad.left - 4, y);
+  }
+
+  // Bars
+  pts.forEach((pt, i) => {
+    const x = xOf(i);
+    const y = yOf(pt[field]);
+    const h = Math.max(2, pad.top + H - y);
+    const col = pt.putt_result === 'made' ? C.made : pt.putt_result === 'missed' ? C.missed : baseColor;
+    ctx.fillStyle = col + 'cc';
+    ctx.beginPath();
+    roundRect(ctx, x - bw / 2, y, bw, h, 2);
+    ctx.fill();
+  });
+
+  // X label
+  ctx.fillStyle = C.muted; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const labelStep = Math.max(1, Math.floor(n / 6));
+  pts.forEach((pt, i) => {
+    if (i % labelStep !== 0 && i !== n - 1) return;
+    const lbl = pt.created_at
+      ? new Date(pt.created_at * 1000).toLocaleDateString([], {month:'short', day:'numeric'})
+      : '#' + (i + 1);
+    ctx.fillText(lbl, xOf(i), pad.top + H + 6);
+  });
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+function renderTable(d) {
+  const wrap = document.getElementById('table-wrap');
+  const rows = [...d.series].reverse().slice(0, 30);
+
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="empty">
+      No putts yet. <a href="/">Analyze a video</a> to populate the dashboard.
+    </div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Date</th>
+        <th>Putt Time</th>
+        <th>File</th>
+        <th>Result</th>
+        <th>Angle</th>
+        <th>Speed (px/s)</th>
+        <th>Disc Frames</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td style="color:var(--text-dim);white-space:nowrap;font-size:12px">${fmtDate(r.created_at)}</td>
+            <td style="font-variant-numeric:tabular-nums;color:var(--text-dim)">${r.timestamp_label || '—'}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dim)">${esc(r.filename || r.job_id)}</td>
+            <td><span class="badge badge-${r.putt_result}">${r.putt_result}</span></td>
+            <td style="font-variant-numeric:tabular-nums">${r.angle_deg != null ? r.angle_deg + '°' : '—'}</td>
+            <td style="font-variant-numeric:tabular-nums">${r.speed_px_s != null ? Math.round(r.speed_px_s) : '—'}</td>
+            <td style="font-variant-numeric:tabular-nums">${r.disc_frames || '—'}</td>
+            <td>
+              <a href="${r.timestamp_s != null ? `/clip/${r.job_id}?t=${encodeURIComponent(r.timestamp_s)}&pad=2` : `/result/${r.job_id}`}" target="_blank"
+                 style="color:var(--blue-lt);font-size:12px;text-decoration:none;white-space:nowrap">
+                View ↗
+              </a>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function drawEmpty(canvas, cssW, cssH, msg) {
+  const ctx = hiDPI(canvas, cssW, cssH);
+  ctx.fillStyle = C.muted; ctx.font = '13px system-ui';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(msg, cssW / 2, cssH / 2);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  if (h < r * 2) r = h / 2;
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function setText(id, val) { document.getElementById(id).textContent = val ?? '—'; }
+function pctOf(a, b) { return b ? Math.round(a / b * 100) + '%' : '0%'; }
+function fmtDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts * 1000).toLocaleDateString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadStats();
+setInterval(loadStats, 30_000);
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (statsData) renderAll(statsData); }, 150);
+});
+</script>
+</body>
+</html>

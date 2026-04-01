@@ -72,6 +72,7 @@
     <video id="video" autoplay playsinline muted></video>
 
     <div class="controls">
+        <button id="btnRecord">Record</button>
         <button id="btnFlip">Flip Camera</button>
     </div>
 
@@ -88,12 +89,14 @@
         const MAX_IN_FLIGHT = 2; // concurrent HTTP uploads — pipelines encoding latency with RTT
 
         const video      = document.getElementById('video');
+        const btnRecord  = document.getElementById('btnRecord');
         const dot        = document.getElementById('dot');
         const statusText = document.getElementById('statusText');
         const fpsEl      = document.getElementById('fps');
 
         let facingMode = 'environment';
         let stopLoop   = false;
+        let isRecording = false;
         let errorCount = 0;
         let framesSent = 0;
         let inFlight   = 0;
@@ -214,7 +217,7 @@
         // Camera setup
         // ---------------------------------------------------------------------------
         async function startCamera() {
-            stopLoop = true; // stop the previous loop cleanly
+            stopLoop = true; // stop any previous loop cleanly
             if (video.srcObject) {
                 video.srcObject.getTracks().forEach(t => t.stop());
                 video.srcObject = null;
@@ -242,19 +245,51 @@
                 await new Promise(resolve =>
                     video.addEventListener('loadedmetadata', resolve, { once: true })
                 );
-                setStatus('green', 'Streaming');
-                startLoop();
+                setStatus('yellow', 'Camera ready');
             } catch (err) {
                 setStatus('red', 'Camera error: ' + err.message);
             }
         }
 
-        document.getElementById('btnFlip').addEventListener('click', () => {
-            facingMode = facingMode === 'environment' ? 'user' : 'environment';
-            startCamera();
+        function startRecording() {
+            if (!video.srcObject) return;
+            stopLoop = false;
+            isRecording = true;
+            btnRecord.textContent = 'Stop';
+            setStatus('green', 'Streaming');
+            startLoop();
+        }
+
+        function stopRecording() {
+            stopLoop = true;
+            isRecording = false;
+            btnRecord.textContent = 'Record';
+            setStatus('yellow', video.srcObject ? 'Camera ready' : 'Ready');
+        }
+
+        btnRecord.addEventListener('click', async () => {
+            if (!video.srcObject) {
+                await startCamera();
+                if (video.srcObject) startRecording();
+                return;
+            }
+
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
         });
 
-        startCamera();
+        document.getElementById('btnFlip').addEventListener('click', () => {
+            facingMode = facingMode === 'environment' ? 'user' : 'environment';
+            const shouldResume = isRecording;
+            startCamera().then(() => {
+                if (shouldResume && video.srcObject) startRecording();
+            });
+        });
+
+        setStatus('yellow', 'Tap Record to start');
     </script>
 </body>
 </html>

@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PuttPro - Video Analysis</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #1e1e1e;
+      --surface: #252526;
+      --surface2: #2d2d30;
+      --border: #3e3e42;
+      --accent: #007acc;
+      --accent2: #4ec9b0;
+      --text: #d4d4d4;
+      --muted: #9d9d9d;
+      --danger: #f44747;
+      --radius: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .logo { font-size: 20px; font-weight: 800; color: var(--accent); }
+    .subtitle { color: var(--muted); font-size: 12px; }
+    nav { display: flex; gap: 8px; }
+    nav a {
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: 6px;
+    }
+    nav a.active {
+      color: var(--accent);
+      background: rgba(0,122,204,0.16);
+      font-weight: 600;
+    }
+
+    main {
+      width: min(1080px, 100%);
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+
+    .panel h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    #drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 26px 14px;
+      text-align: center;
+      position: relative;
+    }
+    #drop-zone input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    #drop-zone.over { border-color: var(--accent); }
+    #drop-zone.has-file { border-color: var(--accent2); }
+
+    #file-name {
+      margin-top: 8px;
+      color: var(--accent2);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .settings { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .field label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+    .field-row { display: flex; align-items: center; justify-content: space-between; }
+    .field-val { font-size: 12px; font-weight: 700; }
+    input[type=range], select { width: 100%; }
+    select {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+    }
+
+    #submit-btn {
+      width: 100%;
+      margin-top: 16px;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #progress-section { display: none; margin-top: 12px; }
+    .progress-bar-wrap {
+      background: var(--surface2);
+      border-radius: 999px;
+      overflow: hidden;
+      height: 8px;
+      margin: 8px 0;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+    .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+    .progress-status { font-size: 13px; font-weight: 600; }
+
+    .error-box {
+      display: none;
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(244,71,71,0.5);
+      background: rgba(244,71,71,0.12);
+      color: #ff8d8d;
+      font-size: 12px;
+    }
+
+    #result-section { display: none; }
+
+    video {
+      width: 100%;
+      border-radius: 8px;
+      background: #000;
+      display: block;
+      max-height: 520px;
+    }
+
+    .putt-banner { display: none; border-radius: 8px; padding: 14px; margin-top: 12px; text-align: center; }
+    .putt-banner-icon { font-size: 34px; }
+    .putt-banner-label { font-size: 22px; font-weight: 800; margin-top: 4px; }
+    .putt-banner-sub { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+
+    .result-actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .btn {
+      text-align: center;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      text-decoration: none;
+      font-weight: 700;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border-color: var(--border); }
+    .btn.active-mode { border-color: var(--accent); color: var(--accent); }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-align: center;
+      padding: 12px;
+    }
+    .stat-value { font-size: 22px; font-weight: 800; }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; text-transform: uppercase; }
+
+    @media (max-width: 840px) {
+      main { grid-template-columns: 1fr; }
+      .result-actions { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">PuttPro</div>
+    <div class="subtitle">Disc golf putting analysis</div>
+  </div>
+  <nav>
+    <a class="active" href="/">Analyze</a>
+    <a href="/dashboard">Dashboard</a>
+  </nav>
+</header>
+
+<main>
+  <div class="panel">
+    <h2>Upload Video</h2>
+    <div id="drop-zone">
+      <input type="file" id="file-input" accept="video/*">
+      <div style="font-size:14px;margin-bottom:6px;color:var(--muted)">Video Upload</div>
+      <div style="font-weight:700">Drop video here</div>
+      <div style="color:var(--muted);font-size:12px;margin-top:4px">or click to browse - MP4, MOV, AVI up to 500 MB</div>
+      <div id="file-name"></div>
+    </div>
+
+    <div class="settings">
+      <div class="field">
+        <div class="field-row">
+          <label for="conf-range">Confidence threshold</label>
+          <span class="field-val" id="conf-val">0.35</span>
+        </div>
+        <input type="range" id="conf-range" min="0.1" max="0.9" step="0.05" value="0.35">
+      </div>
+      <div class="field">
+        <label for="imgsz-select">Inference resolution</label>
+        <select id="imgsz-select">
+          <option value="320">320 px - fastest</option>
+          <option value="480">480 px - balanced</option>
+          <option value="640" selected>640 px - best accuracy</option>
+        </select>
+      </div>
+      <div class="field">
+        <div class="field-row">
+          <label for="skip-select">Analyze every N frames</label>
+          <span class="field-val" id="skip-val">1</span>
+        </div>
+        <select id="skip-select">
+          <option value="1">Every frame</option>
+          <option value="2">Every 2nd frame</option>
+          <option value="3">Every 3rd frame</option>
+          <option value="5">Every 5th frame</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="submit-btn" disabled>Analyze Video</button>
+
+    <div id="progress-section">
+      <div class="progress-status" id="progress-status">Queued...</div>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-fill"></div></div>
+      <div class="progress-label"><span id="progress-pct">0%</span><span id="progress-fps"></span></div>
+    </div>
+
+    <div class="error-box" id="error-box"></div>
+  </div>
+
+  <div>
+    <div class="panel" id="placeholder-panel">
+      <h2>Results</h2>
+      <p style="color:var(--muted);font-size:14px;text-align:center;padding:56px 0;">Upload a video to see analyzed results here.</p>
+    </div>
+
+    <div id="result-section">
+      <div class="panel">
+        <h2>Analyzed Video</h2>
+        <video id="result-video" controls playsinline></video>
+        <div class="putt-banner" id="putt-banner">
+          <div class="putt-banner-icon" id="putt-banner-icon"></div>
+          <div class="putt-banner-label" id="putt-banner-label"></div>
+          <div class="putt-banner-sub" id="putt-banner-sub"></div>
+        </div>
+        <div class="result-actions">
+          <a class="btn btn-primary" id="download-btn" href="#" download>Download Analyzed</a>
+          <button class="btn btn-secondary" id="depth-toggle-btn" type="button" disabled>Depth Unavailable</button>
+          <a class="btn btn-secondary" href="/dashboard">Open Dashboard</a>
+        </div>
+        <div class="stats-grid" id="stats-grid"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  let currentFile = null;
+  let sseSource = null;
+  let currentResultJob = null;
+  let depthModeActive = false;
+
+  const dropZone     = document.getElementById('drop-zone');
+  const fileInput    = document.getElementById('file-input');
+  const fileName     = document.getElementById('file-name');
+  const submitBtn    = document.getElementById('submit-btn');
+  const confRange    = document.getElementById('conf-range');
+  const confVal      = document.getElementById('conf-val');
+  const imgszSelect  = document.getElementById('imgsz-select');
+  const skipSelect   = document.getElementById('skip-select');
+  const skipVal      = document.getElementById('skip-val');
+  const progressSec  = document.getElementById('progress-section');
+  const progressFill = document.getElementById('progress-fill');
+  const progressPct  = document.getElementById('progress-pct');
+  const progressFps  = document.getElementById('progress-fps');
+  const progressStat = document.getElementById('progress-status');
+  const errorBox     = document.getElementById('error-box');
+  const resultSec    = document.getElementById('result-section');
+  const placeholder  = document.getElementById('placeholder-panel');
+  const resultVideo  = document.getElementById('result-video');
+  const downloadBtn  = document.getElementById('download-btn');
+  const depthToggleBtn = document.getElementById('depth-toggle-btn');
+  const statsGrid    = document.getElementById('stats-grid');
+
+  ['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('over'); }));
+  dropZone.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (file) setFile(file);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+  });
+
+  function setFile(file) {
+    currentFile = file;
+    fileName.textContent = file.name;
+    dropZone.classList.add('has-file');
+    submitBtn.disabled = false;
+    hideError();
+  }
+
+  confRange.addEventListener('input', () => confVal.textContent = confRange.value);
+  skipSelect.addEventListener('change', () => skipVal.textContent = skipSelect.value);
+
+  submitBtn.addEventListener('click', async () => {
+    if (!currentFile) return;
+    submitBtn.disabled = true;
+    hideError();
+    progressSec.style.display = 'block';
+    updateProgress(0, 'Uploading...');
+
+    const fd = new FormData();
+    fd.append('video', currentFile);
+    fd.append('conf', confRange.value);
+    fd.append('imgsz', imgszSelect.value);
+    fd.append('frame_skip', skipSelect.value);
+
+    let res;
+    try {
+      res = await fetch('/upload', { method: 'POST', body: fd });
+    } catch (err) {
+      showError('Upload failed: ' + err.message);
+      submitBtn.disabled = false;
+      return;
+    }
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showError(data.error || `Upload error ${res.status}`);
+      submitBtn.disabled = false;
+      return;
+    }
+
+    const { job_id } = await res.json();
+    listenProgress(job_id);
+  });
+
+  function listenProgress(jobId) {
+    if (sseSource) sseSource.close();
+    sseSource = new EventSource(`/status/${jobId}`);
+
+    sseSource.onmessage = e => {
+      const job = JSON.parse(e.data);
+      if (job.error) {
+        showError(job.error);
+        sseSource.close();
+        submitBtn.disabled = false;
+        return;
+      }
+
+      const pct = Math.round((job.progress || 0) * 100);
+      const statusLabels = {
+        queued: 'Queued...',
+        loading_model: 'Loading model...',
+        processing: `Analyzing frames (${pct}%)`,
+        encoding: 'Encoding video...',
+        done: 'Done!'
+      };
+      updateProgress(pct, statusLabels[job.status] || job.status);
+      if (job.inference_fps) progressFps.textContent = job.inference_fps + ' frames/s';
+      if (job.status === 'done') {
+        sseSource.close();
+        showResult(jobId, job);
+      }
+    };
+
+    sseSource.onerror = () => {
+      sseSource.close();
+      showError('Connection interrupted during processing.');
+      submitBtn.disabled = false;
+    };
+  }
+
+  function showResult(jobId, job) {
+    placeholder.style.display = 'none';
+    resultSec.style.display = 'block';
+
+    currentResultJob = job;
+    depthModeActive = false;
+    resultVideo.src = `/result/${jobId}?t=${Date.now()}`;
+    resultVideo.load();
+
+    downloadBtn.href = `/download/${jobId}`;
+    depthToggleBtn.disabled = !job.has_depth;
+    depthToggleBtn.textContent = job.has_depth ? 'View Depth' : 'Depth Unavailable';
+    depthToggleBtn.classList.remove('active-mode');
+
+    const banner = document.getElementById('putt-banner');
+    const bannerIcon = document.getElementById('putt-banner-icon');
+    const bannerLabel = document.getElementById('putt-banner-label');
+    const bannerSub = document.getElementById('putt-banner-sub');
+
+    const flight = job.flight || {};
+    const events = Array.isArray(flight.putt_events) ? flight.putt_events : [];
+    const made = events.filter(e => e.result === 'made').length;
+    const missed = events.filter(e => e.result === 'missed').length;
+    const total = made + missed;
+    const makePct = total ? Math.round((made / total) * 100) : 0;
+
+    if (total) {
+      banner.style.display = 'block';
+      banner.style.background = made >= missed ? 'rgba(78,201,176,0.15)' : 'rgba(244,71,71,0.12)';
+      banner.style.border = `1px solid ${made >= missed ? '#4ec9b0' : '#f44747'}55`;
+      bannerIcon.textContent = made >= missed ? 'Good' : 'Retry';
+      bannerLabel.textContent = `${makePct}% Make Rate`;
+      bannerLabel.style.color = made >= missed ? '#4ec9b0' : '#f44747';
+      bannerSub.textContent = `${total} putts - ${made} made - ${missed} missed`;
+    } else {
+      banner.style.display = 'none';
+    }
+
+    statsGrid.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--accent2)">${total || '-'}</div>
+        <div class="stat-label">Putts</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#6a9955">${total ? made : '-'}</div>
+        <div class="stat-label">Made</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--accent)">${total ? makePct + '%' : '-'}</div>
+        <div class="stat-label">Make %</div>
+      </div>
+    `;
+  }
+
+  depthToggleBtn.addEventListener('click', () => {
+    if (!currentResultJob?.has_depth) return;
+    setDepthMode(!depthModeActive);
+  });
+
+  function setDepthMode(enableDepth) {
+    if (!currentResultJob) return;
+    if (enableDepth && !currentResultJob.has_depth) return;
+
+    const seekTo = resultVideo.currentTime || 0;
+    const wasPlaying = !resultVideo.paused;
+    depthModeActive = enableDepth;
+
+    const src = depthModeActive
+      ? `/result_depth/${currentResultJob.job_id}?t=${Date.now()}`
+      : `/result/${currentResultJob.job_id}?t=${Date.now()}`;
+
+    depthToggleBtn.textContent = depthModeActive ? 'View Video' : 'View Depth';
+    depthToggleBtn.classList.toggle('active-mode', depthModeActive);
+
+    resultVideo.src = src;
+    resultVideo.load();
+    resultVideo.addEventListener('loadedmetadata', () => {
+      if (seekTo > 0) {
+        resultVideo.currentTime = Math.min(seekTo, Math.max(0, (resultVideo.duration || seekTo) - 0.05));
+      }
+      if (wasPlaying) resultVideo.play().catch(() => {});
+    }, { once: true });
+  }
+
+  function updateProgress(pct, label) {
+    progressFill.style.width = pct + '%';
+    progressPct.textContent = pct + '%';
+    progressStat.textContent = label;
+  }
+
+  function showError(msg) {
+    errorBox.textContent = 'Warning: ' + msg;
+    errorBox.style.display = 'block';
+  }
+
+  function hideError() {
+    errorBox.style.display = 'none';
+  }
+</script>
+</body>
+</html>
