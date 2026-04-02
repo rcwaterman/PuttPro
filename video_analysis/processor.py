@@ -278,22 +278,54 @@ def get_video_info(path: str) -> dict:
     return info
 
 
-def _try_h264_writer(path: str, fps: float, w: int, h: int):
-    """Open a VideoWriter using mp4v for the raw intermediate file.
+class _FfmpegWriter:
+    """Writes BGR frames directly to H.264 MP4 via an ffmpeg stdin pipe.
 
-    We always transcode to H.264 via ffmpeg afterwards, so the intermediate
-    only needs to be reliably writable and decodable. OpenCV's avc1/H264
-    encoders on Windows produce malformed bitstreams (invalid intra prediction
-    modes) that cause h264 decoding errors in ffmpeg. mp4v (MPEG-4 Part 2) is
-    always available and produces clean output for ffmpeg to work with.
+    Replaces the OpenCV-VideoWriter + post-transcode pattern. Frames are
+    sent as raw BGR bytes; ffmpeg encodes them inline. The output file is
+    a valid H.264 MP4 from the moment it is closed — no intermediate raw
+    file is needed. Pausing is safe: the pipe simply receives no data while
+    the processing thread is blocked; ffmpeg waits indefinitely.
     """
-    out_path = str(Path(path).with_suffix('.mp4'))
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    writer = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
-    if writer.isOpened():
-        return writer, out_path
-    writer.release()
-    raise RuntimeError('Could not open mp4v VideoWriter')
+
+    def __init__(self, path: str, fps: float, width: int, height: int):
+        cmd = [
+            'ffmpeg', '-y',
+            '-f', 'rawvideo', '-vcodec', 'rawvideo',
+            '-s', f'{width}x{height}',
+            '-pix_fmt', 'bgr24',
+            '-r', str(fps),
+            '-i', 'pipe:0',
+            '-c:v', 'libx264',
+            '-preset', 'fast',
+            '-crf', '22',
+            '-movflags', '+faststart',
+            '-an',
+            path,
+        ]
+        self._proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self.path = path
+
+    def write(self, frame: np.ndarray) -> None:
+        if self._proc.stdin and self._proc.poll() is None:
+            try:
+                self._proc.stdin.write(frame.tobytes())
+            except (OSError, BrokenPipeError):
+                pass
+
+    def release(self) -> None:
+        if self._proc.stdin:
+            try:
+                self._proc.stdin.close()
+            except OSError:
+                pass
+        try:
+            self._proc.wait(timeout=300)
+        except subprocess.TimeoutExpired:
+            self._proc.kill()
+
+    def isOpened(self) -> bool:
+        return self._proc.poll() is None
 
 
 def _ffmpeg_to_h264(src: str, dst: str) -> bool:
@@ -397,24 +429,25 @@ def process_video(
         'height':       height,
     })
 
-    # ── Prepare output writer ────────────────────────────────────────────────
-    raw_out   = os.path.join(output_dir, f'{job_id}_raw.mp4')
-    final_out = os.path.join(output_dir, f'{job_id}.mp4')
+    # ── Prepare output writers ───────────────────────────────────────────────
+    # Use _FfmpegWriter: frames go directly to ffmpeg via stdin pipe and are
+    # encoded to H.264 inline. No intermediate raw file, no post-transcode
+    # step, and pausing is safe (pipe just receives no data while blocked).
+    final_out       = os.path.join(output_dir, f'{job_id}.mp4')
+    depth_final_out = os.path.join(output_dir, f'{job_id}_depth.mp4')
 
     jobs[job_id].update({'pipeline_message': 'Preparing output writers'})
     try:
-        writer, raw_out = _try_h264_writer(raw_out, fps, width, height)
+        writer = _FfmpegWriter(final_out, fps, width, height)
     except Exception as e:
         cap.release()
         _fail(f'Video writer init failed: {e}')
         return
-    depth_writer = None
-    depth_raw_out = os.path.join(output_dir, f'{job_id}_depth_raw.mp4')
-    depth_final_out = os.path.join(output_dir, f'{job_id}_depth.mp4')
+    depth_writer    = None
     depth_output_path = None
-    depth_backend = 'required'
+    depth_backend   = 'required'
     depth_estimator = None
-    depth_skip = DEPTH_FRAME_SKIP
+    depth_skip      = DEPTH_FRAME_SKIP
     last_depth_frame = None
 
     if not DEPTH_ENABLED:
@@ -426,8 +459,8 @@ def process_video(
     jobs[job_id].update({'pipeline_message': 'Loading depth model'})
     try:
         depth_estimator = load_depth_estimator(DEPTH_MODEL_NAME)
-        depth_backend = depth_estimator.backend
-        depth_writer, depth_raw_out = _try_h264_writer(depth_raw_out, fps, width, height)
+        depth_backend   = depth_estimator.backend
+        depth_writer    = _FfmpegWriter(depth_final_out, fps, width, height)
     except Exception as e:
         cap.release()
         writer.release()
@@ -539,37 +572,14 @@ def process_video(
             })
 
     cap.release()
+    # Closing stdin signals ffmpeg to flush and finalize both output files.
+    jobs[job_id].update({'pipeline_message': 'Finalizing output videos'})
     writer.release()
     if depth_writer is not None:
         depth_writer.release()
 
-    jobs[job_id].update({
-        'status': 'encoding',
-        'progress': 1.0,
-        'pipeline_message': 'Encoding output videos',
-    })
-
-    # ── Convert to browser-compatible H.264 via ffmpeg ───────────────────────
-    try:
-        converted = _ffmpeg_to_h264(raw_out, final_out)
-        if converted:
-            os.remove(raw_out)
-            output_path = final_out
-        else:
-            os.rename(raw_out, final_out)
-            output_path = final_out
-
-        if depth_writer is not None and os.path.exists(depth_raw_out):
-            depth_converted = _ffmpeg_to_h264(depth_raw_out, depth_final_out)
-            if depth_converted:
-                os.remove(depth_raw_out)
-                depth_output_path = depth_final_out
-            else:
-                os.rename(depth_raw_out, depth_final_out)
-                depth_output_path = depth_final_out
-    except Exception as e:
-        _fail(f'Encoding failed: {e}')
-        return
+    output_path       = final_out
+    depth_output_path = depth_final_out if depth_writer is not None else None
 
     # ── Analyze trajectory & classify putt ───────────────────────────────────
     flight    = _analyze_trajectory(frame_detections, fps, width, height)
