@@ -37,6 +37,7 @@ from processor import (
     DEPTH_FRAME_SKIP,
     DEPTH_MODEL_NAME,
     DISC_DIAMETER_IN,
+    prime_models,
     process_video,
     process_chunk,
 )
@@ -255,6 +256,15 @@ def _job_public(job: dict) -> dict:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 _load_jobs_db()
+
+# Pre-load and warm-up both models in a background thread so the first real
+# job doesn't pay model-load + CUDA kernel compilation costs at inference time.
+threading.Thread(
+    target=prime_models,
+    kwargs={'model_name': YOLO_MODEL, 'conf': YOLO_CONF, 'imgsz': YOLO_IMGSZ},
+    daemon=True,
+    name='model-primer',
+).start()
 
 
 @app.route('/')

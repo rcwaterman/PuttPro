@@ -220,6 +220,43 @@ def load_depth_estimator(model_name: str = DEPTH_MODEL_NAME) -> DepthEstimator:
     return est
 
 
+def prime_models(
+    model_name: str = 'yolov8n.pt',
+    conf: float = 0.4,
+    imgsz: int = 320,
+) -> None:
+    """Load YOLO and depth models into cache and run a warm-up forward pass.
+
+    Call once at startup (in a background thread) so the first real job gets
+    full GPU throughput without paying model-load or CUDA kernel compilation
+    costs at inference time.
+    """
+    t_total = time.time()
+
+    # ── YOLO ──────────────────────────────────────────────────────────────────
+    try:
+        t0 = time.time()
+        model = load_model(model_name, conf)
+        dummy_yolo = np.zeros((imgsz, imgsz, 3), dtype=np.uint8)
+        model(dummy_yolo, imgsz=imgsz, verbose=False)
+        print(f'[processor] YOLO primed in {time.time() - t0:.1f}s')
+    except Exception as e:
+        print(f'[processor] YOLO prime failed: {e}')
+
+    # ── Depth ─────────────────────────────────────────────────────────────────
+    if DEPTH_ENABLED:
+        try:
+            t0 = time.time()
+            est = load_depth_estimator(DEPTH_MODEL_NAME)
+            dummy_depth = np.zeros((64, 64, 3), dtype=np.uint8)
+            est.render(dummy_depth)
+            print(f'[processor] Depth model primed in {time.time() - t0:.1f}s')
+        except Exception as e:
+            print(f'[processor] Depth prime failed: {e}')
+
+    print(f'[processor] Models ready in {time.time() - t_total:.1f}s total')
+
+
 # ── Video processing ──────────────────────────────────────────────────────────
 
 ALLOWED_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'}
