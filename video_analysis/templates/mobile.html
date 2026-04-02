@@ -836,6 +836,7 @@
       </div>
       <div class="pipeline-status" id="pipeline-status">Pipeline: waiting to start</div>
       <div class="upload-fps" id="upload-fps"></div>
+      <button id="pause-analysis-btn" style="display:none;margin-top:18px;padding:10px 28px;border-radius:99px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;transition:background 0.15s,border-color 0.15s" type="button">Pause</button>
     </div>
 
     <!-- Stats / Dashboard -->
@@ -1012,6 +1013,13 @@ const uploadFill     = $('upload-progress-fill');
 const uploadPipeline = $('pipeline-status');
 const uploadFps      = $('upload-fps');
 const uploadIcon     = $('upload-icon');
+const pauseAnalysisBtn = $('pause-analysis-btn');
+pauseAnalysisBtn.addEventListener('click', () => {
+  if (!currentJobId) return;
+  const pausing = pauseAnalysisBtn.textContent === 'Pause';
+  fetch(`/jobs/${currentJobId}/${pausing ? 'pause' : 'resume'}`, { method: 'POST' })
+    .catch(() => showToast('Network error'));
+});
 const resultVideo    = $('result-video');
 const resultStats    = $('result-stats');
 const resultDlBtn    = $('result-download-btn');
@@ -1655,6 +1663,7 @@ function openProgress(jobId) {
   uploadPipeline.textContent = 'Pipeline: reconnecting to job updates';
   uploadFill.style.width    = '0%';
   uploadFps.textContent     = '';
+  pauseAnalysisBtn.style.display = 'none';
 
   SCREEN_STACK.length = 0;
   SCREEN_STACK.push('screen-uploading');
@@ -1703,8 +1712,26 @@ function listenProgress(jobId) {
       uploadSubLabel.textContent = stageMsg;
     }
 
+    // Pause/Resume button visibility
+    if (job.status === 'processing') {
+      pauseAnalysisBtn.style.display = '';
+      pauseAnalysisBtn.textContent   = 'Pause';
+      pauseAnalysisBtn.style.borderColor = 'var(--border)';
+      pauseAnalysisBtn.style.color       = 'var(--text)';
+    } else if (job.status === 'paused') {
+      pauseAnalysisBtn.style.display = '';
+      pauseAnalysisBtn.textContent   = 'Resume';
+      pauseAnalysisBtn.style.borderColor = 'var(--accent)';
+      pauseAnalysisBtn.style.color       = 'var(--accent)';
+      uploadIcon.textContent  = '⏸';
+      uploadLabel.textContent = 'Paused';
+    } else {
+      pauseAnalysisBtn.style.display = 'none';
+    }
+
     if (job.status === 'done') {
       sseSource.close();
+      pauseAnalysisBtn.style.display = 'none';
       uploadIcon.textContent  = '✅';
       uploadLabel.textContent = 'Done!';
       uploadPipeline.textContent = 'Pipeline: analysis complete';

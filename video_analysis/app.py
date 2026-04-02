@@ -69,6 +69,10 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
 
+# Per-job threading.Event for pause/resume (set = running, cleared = paused).
+job_pause_events: dict[str, threading.Event] = {}
+job_pause_lock = threading.Lock()
+
 sessions: dict[str, dict] = {}
 sessions_lock = threading.Lock()
 
@@ -124,6 +128,11 @@ def _save_jobs_db() -> None:
 def _on_job_complete(job_id: str) -> None:
     """Callback invoked by the processor thread when a job finishes."""
     _save_jobs_db()
+    # Release any thread blocked on pause so it can exit cleanly.
+    with job_pause_lock:
+        ev = job_pause_events.pop(job_id, None)
+    if ev is not None:
+        ev.set()
 
 
 # ── Stats archive (survives job deletion) ─────────────────────────────────────
@@ -313,6 +322,9 @@ def upload():
     skip_override  = request.form.get('frame_skip', type=int,   default=FRAME_SKIP)
     model_override = request.form.get('model',      default=YOLO_MODEL)
 
+    pause_event = threading.Event()
+    pause_event.set()   # start in running state
+
     with jobs_lock:
         jobs[job_id] = {
             'job_id':     job_id,
@@ -322,6 +334,8 @@ def upload():
             'filename':   file.filename,
             'created_at': time.time(),
         }
+    with job_pause_lock:
+        job_pause_events[job_id] = pause_event
 
     thread = threading.Thread(
         target=process_video,
@@ -332,6 +346,7 @@ def upload():
             'imgsz':       imgsz_override,
             'frame_skip':  skip_override,
             'on_complete': _on_job_complete,
+            'pause_event': pause_event,
         },
         daemon=True,
     )
@@ -378,6 +393,36 @@ def status_sse(job_id: str):
         mimetype='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
+
+
+@app.route('/jobs/<job_id>/pause', methods=['POST'])
+def pause_job(job_id: str):
+    """Pause an in-progress analysis job."""
+    with job_pause_lock:
+        ev = job_pause_events.get(job_id)
+    if ev is None:
+        return jsonify({'error': 'Job not found or not pausable'}), 404
+    ev.clear()
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job and job.get('status') == 'processing':
+            job.update({'status': 'paused', 'pipeline_message': 'Paused'})
+    return jsonify({'status': 'paused', 'job_id': job_id})
+
+
+@app.route('/jobs/<job_id>/resume', methods=['POST'])
+def resume_job(job_id: str):
+    """Resume a paused analysis job."""
+    with job_pause_lock:
+        ev = job_pause_events.get(job_id)
+    if ev is None:
+        return jsonify({'error': 'Job not found or not resumable'}), 404
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job and job.get('status') == 'paused':
+            job.update({'status': 'processing', 'pipeline_message': 'Analyzing frames'})
+    ev.set()
+    return jsonify({'status': 'processing', 'job_id': job_id})
 
 
 @app.route('/result/<job_id>')
@@ -533,7 +578,12 @@ def delete_job(job_id: str):
             except OSError:
                 pass
 
-    # Remove from in-memory jobs and persist
+    # Release any paused thread so it can exit cleanly, then remove job
+    with job_pause_lock:
+        ev = job_pause_events.pop(job_id, None)
+    if ev is not None:
+        ev.set()
+
     with jobs_lock:
         jobs.pop(job_id, None)
     _save_jobs_db()
@@ -777,6 +827,11 @@ def stream_stop(session_id: str):
             except OSError:
                 pass
 
+        session_pause_event = threading.Event()
+        session_pause_event.set()
+        with job_pause_lock:
+            job_pause_events[local_job_id] = session_pause_event
+
         thread = threading.Thread(
             target=process_video,
             args=(str(input_path), str(OUTPUT_DIR), local_job_id, jobs),
@@ -786,6 +841,7 @@ def stream_stop(session_id: str):
                 'imgsz':       imgsz_for_job,
                 'frame_skip':  FRAME_SKIP,
                 'on_complete': _on_job_complete,
+                'pause_event': session_pause_event,
             },
             daemon=True,
         )

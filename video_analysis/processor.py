@@ -329,7 +329,8 @@ def process_video(
     conf: float = 0.4,
     imgsz: int = 640,
     frame_skip: int = 1,
-    on_complete=None,   # optional callable(job_id) invoked when done or error
+    on_complete=None,      # optional callable(job_id) invoked when done or error
+    pause_event=None,      # threading.Event — cleared = paused, set = running
 ) -> None:
     """
     Process a video file with YOLO and write annotated output.
@@ -348,6 +349,8 @@ def process_video(
         imgsz:       YOLO inference image size.
         frame_skip:  Process every Nth frame (1 = every frame).
         on_complete: Optional callback invoked when job finishes or errors.
+        pause_event: threading.Event controlling pause/resume. If None,
+                     processing runs uninterrupted.
     """
     jobs[job_id].update({
         'status': 'loading_model',
@@ -441,6 +444,12 @@ def process_video(
     jobs[job_id].update({'pipeline_message': 'Analyzing frames'})
 
     while True:
+        # ── Pause gate ───────────────────────────────────────────────────────
+        if pause_event is not None and not pause_event.is_set():
+            jobs[job_id].update({'status': 'paused', 'pipeline_message': 'Paused'})
+            pause_event.wait()   # blocks until resume_job() calls event.set()
+            jobs[job_id].update({'status': 'processing', 'pipeline_message': 'Analyzing frames'})
+
         ok, frame = cap.read()
         if not ok:
             break
