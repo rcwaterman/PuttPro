@@ -56,7 +56,8 @@ YOLO_IMGSZ     = int(os.environ.get('YOLO_IMGSZ', '640'))
 FRAME_SKIP     = int(os.environ.get('FRAME_SKIP',  '1'))
 PORT           = int(os.environ.get('PORT', '5050'))
 
-DB_PATH = OUTPUT_DIR / 'jobs_db.json'
+DB_PATH           = OUTPUT_DIR / 'jobs_db.json'
+STATS_ARCHIVE_PATH = OUTPUT_DIR / 'stats_archive.json'
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
@@ -122,6 +123,66 @@ def _save_jobs_db() -> None:
 def _on_job_complete(job_id: str) -> None:
     """Callback invoked by the processor thread when a job finishes."""
     _save_jobs_db()
+
+
+# ── Stats archive (survives job deletion) ─────────────────────────────────────
+
+def _job_to_series_entries(job: dict) -> list[dict]:
+    """Convert a completed job into the list of series entries used by /stats."""
+    entries = []
+    created_at = job.get('created_at', 0)
+    events = job.get('flight', {}).get('putt_events') or []
+    if events:
+        for idx, ev in enumerate(events, start=1):
+            t_s = ev.get('timestamp_s', 0.0) or 0.0
+            entries.append({
+                'job_id':             job['job_id'],
+                'filename':           job.get('filename', ''),
+                'created_at':         created_at + t_s,
+                'session_created_at': created_at,
+                'putt_result':        ev.get('result', 'unknown'),
+                'angle_deg':          ev.get('angle_deg'),
+                'speed_px_s':         ev.get('speed_px_s'),
+                'disc_frames':        ev.get('disc_frames', 0),
+                'timestamp_s':        round(t_s, 2),
+                'timestamp_label':    ev.get('timestamp_label', ''),
+                'event_idx':          idx,
+            })
+    else:
+        entries.append({
+            'job_id':             job['job_id'],
+            'filename':           job.get('filename', ''),
+            'created_at':         created_at,
+            'session_created_at': created_at,
+            'putt_result':        job.get('putt_result', 'unknown'),
+            'angle_deg':          job.get('flight', {}).get('angle_deg'),
+            'speed_px_s':         job.get('flight', {}).get('speed_px_s'),
+            'disc_frames':        job.get('flight', {}).get('disc_frames', 0),
+            'timestamp_s':        None,
+            'timestamp_label':    '',
+            'event_idx':          1,
+        })
+    return entries
+
+
+def _load_stats_archive() -> list[dict]:
+    if not STATS_ARCHIVE_PATH.exists():
+        return []
+    try:
+        with open(STATS_ARCHIVE_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _append_to_stats_archive(entries: list[dict]) -> None:
+    archive = _load_stats_archive()
+    archive.extend(entries)
+    try:
+        with open(STATS_ARCHIVE_PATH, 'w') as f:
+            json.dump(archive, f)
+    except Exception as e:
+        print(f'[app] Warning: could not update stats_archive: {e}')
 
 
 def _session_chunk_paths(session_id: str) -> list[Path]:
@@ -420,6 +481,56 @@ def download_video(job_id: str):
     return send_file(path, as_attachment=True, download_name=f'{stem}_analyzed.mp4')
 
 
+@app.route('/history/<job_id>', methods=['DELETE'])
+def delete_job(job_id: str):
+    """Delete a completed job: remove video files and history entry.
+    Aggregated putting stats are preserved in the stats archive."""
+    with jobs_lock:
+        job = jobs.get(job_id)
+
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    if job.get('status') not in ('done', 'error'):
+        return jsonify({'error': 'Cannot delete a job that is still running'}), 409
+
+    # Preserve stats before deleting
+    if job.get('status') == 'done':
+        _append_to_stats_archive(_job_to_series_entries(job))
+
+    # Delete video / output files
+    for key in ('output_path', 'depth_output_path'):
+        path = job.get(key)
+        if path:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    # Delete uploaded input (regular upload or session-assembled input)
+    for pattern in (f'{job_id}.*', f'{job_id}_session_input.mp4'):
+        for p in UPLOAD_DIR.glob(pattern):
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    # Delete any cached clips
+    clips_dir = OUTPUT_DIR / 'clips'
+    if clips_dir.exists():
+        for p in clips_dir.glob(f'{job_id}_*.mp4'):
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    # Remove from in-memory jobs and persist
+    with jobs_lock:
+        jobs.pop(job_id, None)
+    _save_jobs_db()
+
+    return jsonify({'status': 'deleted', 'job_id': job_id})
+
+
 @app.route('/history')
 def history():
     """Return all completed jobs, newest first. Used by mobile history screen."""
@@ -447,45 +558,21 @@ def healthz():
 
 @app.route('/stats')
 def putt_stats():
-    """Aggregate putt analytics across all completed jobs."""
+    """Aggregate putt analytics across all completed jobs and the stats archive."""
     with jobs_lock:
         done_jobs = [j for j in jobs.values() if j.get('status') == 'done']
 
+    # Live jobs
     series = []
     for j in done_jobs:
-        created_at = j.get('created_at', 0)
-        events = j.get('flight', {}).get('putt_events') or []
-        if events:
-            for idx, ev in enumerate(events, start=1):
-                t_s = ev.get('timestamp_s', 0.0) or 0.0
-                series.append({
-                    'job_id': j['job_id'],
-                    'filename': j.get('filename', ''),
-                    'created_at': created_at + t_s,  # preserve within-session ordering
-                    'session_created_at': created_at,
-                    'putt_result': ev.get('result', 'unknown'),
-                    'angle_deg': ev.get('angle_deg'),
-                    'speed_px_s': ev.get('speed_px_s'),
-                    'disc_frames': ev.get('disc_frames', 0),
-                    'timestamp_s': round(t_s, 2),
-                    'timestamp_label': ev.get('timestamp_label', ''),
-                    'event_idx': idx,
-                })
-        else:
-            # Backward compatibility for older jobs.
-            series.append({
-                'job_id':     j['job_id'],
-                'filename':   j.get('filename', ''),
-                'created_at': created_at,
-                'session_created_at': created_at,
-                'putt_result': j.get('putt_result', 'unknown'),
-                'angle_deg':  j.get('flight', {}).get('angle_deg'),
-                'speed_px_s': j.get('flight', {}).get('speed_px_s'),
-                'disc_frames': j.get('flight', {}).get('disc_frames', 0),
-                'timestamp_s': None,
-                'timestamp_label': '',
-                'event_idx': 1,
-            })
+        series.extend(_job_to_series_entries(j))
+
+    # Archived (deleted) jobs — merge and deduplicate by job_id+event_idx
+    live_keys = {(e['job_id'], e.get('event_idx', 1)) for e in series}
+    for entry in _load_stats_archive():
+        key = (entry.get('job_id'), entry.get('event_idx', 1))
+        if key not in live_keys:
+            series.append(entry)
 
     series.sort(key=lambda x: x['created_at'])
 

@@ -216,6 +216,16 @@
     .status-error     { background: rgba(244,71,71,0.15);  color: var(--danger); }
     .status-working   { background: rgba(0,122,204,0.15);  color: var(--accent); }
 
+    .del-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; flex-shrink: 0;
+      background: none; border: none;
+      color: var(--muted); cursor: pointer;
+      border-radius: 6px; transition: color 0.15s, background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .del-btn:active { color: var(--danger); background: rgba(244,71,71,0.12); }
+
     .empty-state {
       text-align: center;
       padding: 80px 32px;
@@ -1132,6 +1142,41 @@ tabHome.addEventListener('click',    () => showTab('home'));
 tabStats.addEventListener('click',   () => showTab('stats'));
 
 // ── History ───────────────────────────────────────────────────────────────────
+function confirmDeleteJob(jobId, cardEl) {
+  // Inline confirmation: turn delete btn red; second tap confirms
+  const btn = cardEl.querySelector('.del-btn');
+  if (!btn) return;
+  if (btn.dataset.confirming) {
+    deleteJob(jobId, cardEl);
+  } else {
+    btn.style.color = 'var(--danger)';
+    btn.dataset.confirming = '1';
+    // Auto-cancel after 3 s
+    setTimeout(() => {
+      btn.style.color = '';
+      delete btn.dataset.confirming;
+    }, 3000);
+  }
+}
+
+async function deleteJob(jobId, cardEl) {
+  try {
+    const res = await fetch(`/history/${jobId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Delete failed');
+      return;
+    }
+    // Animate card out, then remove
+    cardEl.style.transition = 'opacity 0.2s';
+    cardEl.style.opacity = '0';
+    setTimeout(() => cardEl.remove(), 220);
+    showToast('Deleted — stats preserved');
+  } catch {
+    showToast('Network error');
+  }
+}
+
 async function loadHistory() {
   jobList.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div></div>';
   try {
@@ -1186,6 +1231,11 @@ async function loadHistory() {
           <div class="job-meta">${esc(metaParts.join(' · '))}</div>
         </div>
         <div class="job-status ${statusClass}">${esc(statusLabel)}</div>
+        <button class="del-btn" aria-label="Delete" title="Delete">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+        </button>
       `;
 
       if (job.status === 'done') {
@@ -1193,6 +1243,11 @@ async function loadHistory() {
       } else if (isWorking) {
         card.addEventListener('click', () => openProgress(job.job_id));
       }
+
+      card.querySelector('.del-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        confirmDeleteJob(job.job_id, card);
+      });
 
       jobList.appendChild(card);
     });
@@ -1914,20 +1969,29 @@ function renderMobileStats(d) {
     list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">No putts yet</div>';
     return;
   }
-  list.innerHTML = rows.map(r => {
-    const color = r.putt_result === 'made' ? '#6a9955' : r.putt_result === 'missed' ? '#f44747' : '#6a6a6a';
-    const icon  = r.putt_result === 'made' ? '✓' : r.putt_result === 'missed' ? '✗' : '?';
-    const date  = r.created_at
-      ? new Date(r.created_at * 1000).toLocaleDateString([], {month:'short',day:'numeric'})
+  list.innerHTML = rows.map((r, i) => {
+    const isMade   = r.putt_result === 'made';
+    const isMissed = r.putt_result === 'missed';
+    const color    = isMade ? '#6a9955' : isMissed ? '#f44747' : '#6a6a6a';
+    const bgColor  = isMade ? 'rgba(106,153,85,0.15)' : isMissed ? 'rgba(244,71,71,0.15)' : 'rgba(106,106,106,0.15)';
+    const icon     = isMade ? '✓' : isMissed ? '✗' : '—';
+    const label    = isMade ? 'Made' : isMissed ? 'Missed' : 'Unknown';
+    const date     = r.created_at
+      ? new Date(r.created_at * 1000).toLocaleDateString([], {month:'short', day:'numeric'})
       : '';
-    const tsLbl = r.timestamp_label ? ` · ${r.timestamp_label}` : '';
-    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid rgba(255,255,255,0.04)">
-      <div style="width:28px;height:28px;border-radius:50%;background:${color}22;color:${color};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0">${icon}</div>
+    const tsLbl    = r.timestamp_label ? ` · ${r.timestamp_label}` : '';
+    const meta     = date || tsLbl ? (date + tsLbl).replace(/^ · /, '') : '';
+    // Show friendly name: strip session_ prefix and raw UUID filenames
+    let name = r.filename || '';
+    if (!name || /^[0-9a-f]{32}/.test(name)) name = `Job ${r.job_id.slice(0, 8)}`;
+    const sep = i > 0 ? 'border-top:1px solid rgba(255,255,255,0.04);' : '';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;${sep}">
+      <div style="width:28px;height:28px;border-radius:50%;background:${bgColor};color:${color};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0">${icon}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.filename || r.job_id)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${date}${tsLbl}</div>
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</div>
+        ${meta ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(meta)}</div>` : ''}
       </div>
-      <div style="font-size:12px;font-weight:700;color:${color};text-transform:uppercase">${r.putt_result}</div>
+      <div style="font-size:12px;font-weight:700;color:${color}">${label}</div>
     </div>`;
   }).join('');
 }
