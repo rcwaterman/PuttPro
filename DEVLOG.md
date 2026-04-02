@@ -21,7 +21,7 @@
 | Disc trajectory analysis | ✅ | Track bounding box centers, compute speed/angle, classify made/missed |
 | Putt analytics dashboard | ✅ | `/dashboard` — make %, trend chart, flight data table |
 | Mobile PWA (record + upload + stats) | ✅ | `video_analysis/templates/mobile.html` — 3-tab PWA with explicit `Enable Camera` / `Record` / `Start Live` action button |
-| GPU inference (YOLO, server) | ⚠️ | CUDA available (RTX 4080 SUPER, cu126); FP16 disabled by linter |
+| GPU inference (YOLO, server) | ✅ | CUDA + FP16 enabled (`model.model.half()`) — RTX 4080 SUPER |
 | GPU inference (YOLO, mobile) | ✅ | CoreML (iOS) / NNAPI (Android) via ONNX Runtime |
 | MediaPipe hand landmark detection | ❌ | Removed 2026-03-29 — not suited to disc flight |
 | Token auth (persistent) | ✅ | `.upload_token` survives restarts |
@@ -195,12 +195,13 @@ YOLO runs in `RemoteCamera._process_loop` (background thread) — the upload han
 | 2026-03-31 | Reported UI text encoding issues and depth-map correctness concerns | Repaired corrupted mobile UI glyph strings in `video_analysis/templates/mobile.html`; removed depth fallback paths in `video_analysis/processor.py` so jobs now require successful Hugging Face depth model load + inference (fail-fast on depth errors) |
 | 2026-03-31 | Reported jobs stuck at `Analyzing frames - 0%` and requested clearer in-app processing visibility | Added explicit pipeline stage messages (`pipeline_message`) across backend job lifecycle, extended SSE signature to emit stage-only updates, hardened processor failure paths so jobs flip to `error` instead of stalling at 0%, and added a dedicated pipeline status bar on the mobile uploading/analyzing screen |
 | 2026-03-31 | Requested next-day handoff: delete videos from History while preserving persistent stats | Plan for next implementation: add a History delete action that removes video artifacts and history entries, but keeps aggregated putting stats from those sessions in persistent data so longitudinal analytics remain intact. Also clean up the mobile dashboard layout, specifically the malformed formatting in the recent putt data section at the bottom of the page |
+| 2026-04-01 | Enabled CUDA FP16, added History delete with persistent stats, fixed mobile dashboard formatting | `model.model.half()` enabled in `processor.py`; `DELETE /history/<job_id>` archives putt events to `stats_archive.json` before removing files so `/stats` retains longitudinal data; mobile history cards have tap-twice-to-confirm delete with fade-out; stats putt list uses `rgba()` backgrounds, capitalized labels, no double-border, friendly session filenames |
 
 ---
 
 ## Known Issues / Open Questions
 
-- **Server YOLO FP16 disabled**: `model.model.half()` commented out by linter. Re-enable in `camera.py` line 28 for full RTX 4080 SUPER throughput.
+- **YOLO fine-tuning needed**: YOLOv8n COCO `frisbee` class is a rough proxy. Disc golf discs and baskets require a labelled dataset and fine-tuning for reliable detection.
 - **YOLO fine-tuning needed**: YOLOv8n COCO `frisbee` class is a rough proxy. Disc golf discs and baskets require a labelled dataset and fine-tuning for reliable detection.
 - **Mobile camera FPS**: many phones cap `getUserMedia` rear camera at 30fps regardless of constraints. True 60fps capture requires native camera APIs (not available in browser/WebView).
 - **Single MJPEG consumer**: `frame_event` is a `threading.Event`; only one browser tab gets efficient delivery. Multiple viewers need a broadcast `Condition` variable.
