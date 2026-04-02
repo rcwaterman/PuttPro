@@ -96,9 +96,8 @@ def load_model(model_name: str = 'yolov8n.pt', conf: float = 0.4):
 
     if torch.cuda.is_available():
         model.to(0)
-        model.model.half()  # FP16 — full RTX throughput
         device_name = torch.cuda.get_device_name(0)
-        print(f'[processor] YOLO loaded on CUDA FP16 — {device_name}')
+        print(f'[processor] YOLO loaded on CUDA — {device_name}')
     else:
         print('[processor] YOLO loaded on CPU')
 

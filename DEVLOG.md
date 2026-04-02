@@ -21,7 +21,7 @@
 | Disc trajectory analysis | ✅ | Track bounding box centers, compute speed/angle, classify made/missed |
 | Putt analytics dashboard | ✅ | `/dashboard` — make %, trend chart, flight data table |
 | Mobile PWA (record + upload + stats) | ✅ | `video_analysis/templates/mobile.html` — 3-tab PWA with explicit `Enable Camera` / `Record` / `Start Live` action button |
-| GPU inference (YOLO, server) | ✅ | CUDA + FP16 enabled (`model.model.half()`) — RTX 4080 SUPER |
+| GPU inference (YOLO, server) | ✅ | CUDA FP32 — RTX 4080 SUPER; FP16 breaks YOLO inference, do not use |
 | GPU inference (YOLO, mobile) | ✅ | CoreML (iOS) / NNAPI (Android) via ONNX Runtime |
 | MediaPipe hand landmark detection | ❌ | Removed 2026-03-29 — not suited to disc flight |
 | Token auth (persistent) | ✅ | `.upload_token` survives restarts |
