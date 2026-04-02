@@ -279,18 +279,21 @@ def get_video_info(path: str) -> dict:
 
 
 def _try_h264_writer(path: str, fps: float, w: int, h: int):
-    """Try to open a VideoWriter with H.264; fall back to mp4v."""
-    for fourcc_str, ext in [('avc1', '.mp4'), ('H264', '.mp4'), ('mp4v', '.mp4')]:
-        try:
-            out_path = str(Path(path).with_suffix(ext))
-            fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
-            writer = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
-            if writer.isOpened():
-                return writer, out_path
-            writer.release()
-        except Exception:
-            pass
-    raise RuntimeError('No suitable video codec found (tried avc1, H264, mp4v)')
+    """Open a VideoWriter using mp4v for the raw intermediate file.
+
+    We always transcode to H.264 via ffmpeg afterwards, so the intermediate
+    only needs to be reliably writable and decodable. OpenCV's avc1/H264
+    encoders on Windows produce malformed bitstreams (invalid intra prediction
+    modes) that cause h264 decoding errors in ffmpeg. mp4v (MPEG-4 Part 2) is
+    always available and produces clean output for ffmpeg to work with.
+    """
+    out_path = str(Path(path).with_suffix('.mp4'))
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
+    if writer.isOpened():
+        return writer, out_path
+    writer.release()
+    raise RuntimeError('Could not open mp4v VideoWriter')
 
 
 def _ffmpeg_to_h264(src: str, dst: str) -> bool:
@@ -299,6 +302,7 @@ def _ffmpeg_to_h264(src: str, dst: str) -> bool:
         subprocess.run(
             [
                 'ffmpeg', '-y',
+                '-fflags', '+genpts',   # regenerate PTS for clean timestamp stream
                 '-i', src,
                 '-c:v', 'libx264',
                 '-preset', 'fast',
